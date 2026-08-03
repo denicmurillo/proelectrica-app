@@ -34,12 +34,11 @@ import { BarChart } from '@mui/x-charts/BarChart';
 // =================================================================
 // ENTORNO Y CREDENCIALES
 // =================================================================
-// Variable inteligente: Detecta si está en local o en Vercel
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
-const GOOGLE_API_KEY = 'AIzaSyDKjwOo7HOz70YlfRYomq6q2ZvTu4YPOYI';
-const GOOGLE_CLIENT_ID = '807736714646-qdohjpc5ind6n2g86oernj5q11of6fnq.apps.googleusercontent.com';
-const GOOGLE_APP_ID = '807736714646';
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
 
 // =================================================================
 // CONSTANTES Y LISTAS 
