@@ -1,0 +1,14 @@
+proelectrica-backend/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # Punto de entrada y configuración de la API
+│   ├── api/
+│   │   └── endpoints.py     # Aquí viven las rutas (ej. /webhook-forms)
+│   ├── core/
+│   │   └── config.py        # Claves de seguridad y variables de entorno
+│   ├── models/
+│   │   └── database.py      # Estructura de tablas para PostgreSQL
+│   └── schemas/
+│       └── payload.py       # Validadores de datos (Pydantic)
+├── requirements.txt         # Lista de librerías (fastapi, uvicorn, etc.)
+└── .env                     # Archivo oculto con contraseñas

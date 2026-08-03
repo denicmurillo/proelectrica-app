@@ -1,0 +1,19 @@
+/* index.css - Reset Global Fluido */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  background-color: #f1f5f9;
+  /* El fondo gris base */
+  font-family: 'Roboto', 'Inter', system-ui, sans-serif;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  /* AQUÍ ROMPEMOS LA CAJA DE VITE */
+  margin: 0;
+  padding: 0;
+}
