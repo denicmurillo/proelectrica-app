@@ -32,8 +32,11 @@ import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 
 // =================================================================
-// CREDENCIALES GOOGLE CLOUD
+// ENTORNO Y CREDENCIALES
 // =================================================================
+// Variable inteligente: Detecta si está en local o en Vercel
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
 const GOOGLE_API_KEY = 'AIzaSyDKjwOo7HOz70YlfRYomq6q2ZvTu4YPOYI';
 const GOOGLE_CLIENT_ID = '807736714646-qdohjpc5ind6n2g86oernj5q11of6fnq.apps.googleusercontent.com';
 const GOOGLE_APP_ID = '807736714646';
@@ -83,7 +86,6 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
 
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
 
-  // 1. Cálculos de Gerencia (Capital Cobrado y Cuentas por Cobrar)
   const calcularMetricasGerencia = () => {
     let cobradoGeneral = 0; let cobradoFiltrado = 0; let cuentasPorCobrar = 0;
     const conteoEmpresas = {};
@@ -96,11 +98,10 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
       conteoEmpresas[empresa] = (conteoEmpresas[empresa] || 0) + 1;
       const pasaFiltro = empresaFiltroGerencia === 'Todas' || empresa === empresaFiltroGerencia;
 
-      // Cuentas por Cobrar
       if (["Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) {
         if (pasaFiltro) cuentasPorCobrar += monto;
       }
-      // Dinero en banco (Cobrado)
+
       const esVerifCobrada = !isProyectoApp(p) && p.datos_dinamicos?.cancelacion_pago === 'Sí';
       const esProyCobrado = isProyectoApp(p) && estadoSeguro === 'Pago recibido y proyecto archivado';
 
@@ -117,7 +118,6 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
     return { cobradoGeneral, cobradoFiltrado, cuentasPorCobrar, pieData, total: proyectos.length };
   };
 
-  // 2. Cálculos de PMO (Alertas de Fechas y Salud)
   const calcularMetricasPMO = () => {
     const pmoProyectos = proyectos.filter(p => isProyectoApp(p) && !(p.estado || '').includes('archivado'));
     const saludCont = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
@@ -129,20 +129,17 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
     hoy.setHours(0, 0, 0, 0);
 
     pmoProyectos.forEach(p => {
-      // Analizar Salud
       const salud = p.salud_proyecto || 'Saludable';
       saludCont[salud] += 1;
       if (salud === 'Necesita atención' || salud === 'En peligro') {
         proyectosEnRiesgo.push({ id: p.id, titulo: p.titulo_proyecto, salud });
       }
 
-      // Analizar Talento
       const talentos = p.datos_dinamicos?.talento_requerido || [];
       if (Array.isArray(talentos)) {
         talentos.forEach(t => { talentoCont[t] = (talentoCont[t] || 0) + 1; });
       }
 
-      // Lógica de Vencimiento de Proyectos a Prueba de Balas (Timezones)
       if (p.fecha_fin && !["Completado y listo para facturar", "Facturado y pendiente de pago"].includes(p.estado)) {
         const parts = p.fecha_fin.split(/[-/]/);
         if (parts.length === 3) {
@@ -176,7 +173,6 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
     return { saludData, talentoData, proyectosCercaVencimiento, proyectosEnRiesgo, totalActivos: pmoProyectos.length };
   };
 
-  // 3. Cálculos de GC (Flujo ISO 17020)
   const calcularMetricasGC = () => {
     const verifProyectos = proyectos.filter(p => !isProyectoApp(p));
     const estadosCont = {};
@@ -194,10 +190,8 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
         seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
       }
 
-      // Regla de Alerta VBA
       if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) { alertasVBA += 1; }
 
-      // Regla de Alerta Flujo Calidad (ISO 17020)
       if (estadosFlujoCalidad.includes(estadoSeguro)) {
         informesPendientes.push({
           id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro
@@ -477,7 +471,7 @@ function App() {
     estadoActualRef.current = { archivos, bitacora, datosGC, proyectoSeleccionado };
   }, [archivos, bitacora, datosGC, proyectoSeleccionado]);
 
-  // SISTEMA DE POLLING SILENCIOSO (AUTO-REFRESH CADA 10 SEGUNDOS)
+  // POLLING Y CARGA INICIAL
   useEffect(() => {
     cargarProyectos();
     inicializarGoogleAPIs();
@@ -592,9 +586,10 @@ function App() {
     autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
   };
 
+  // LLAMADA AL BACKEND USANDO API_URL DINÁMICA
   const cargarProyectos = async () => {
     try {
-      const respuesta = await axios.get('http://localhost:8000/v1/proyectos');
+      const respuesta = await axios.get(`${API_URL}/v1/proyectos`);
       setProyectos(respuesta.data);
     } catch (error) { console.error(error); }
   };
@@ -723,8 +718,9 @@ function App() {
         archivos: nuevosArchivos,
         datos_dinamicos: datosDinamicosActualizados
       };
-      await axios.put(`http://localhost:8000/v1/proyectos/${proyectoBase.id}/gestion`, payload);
-      // El polling actualizará la tabla
+
+      // LLAMADA AL BACKEND USANDO API_URL DINÁMICA
+      await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
     } catch (error) { console.error("Error en autoguardado:", error); }
   };
 
@@ -775,19 +771,17 @@ function App() {
     autoguardarEnBackend(datosGC, nuevaBitacora, archivos, proyectoSeleccionado);
   };
 
+  // LLAMADA AL BACKEND USANDO API_URL DINÁMICA
   const crearProyectoManual = async () => {
     try {
-      const res = await axios.post('http://localhost:8000/v1/proyectos/manual');
-      const respuestaLista = await axios.get('http://localhost:8000/v1/proyectos');
+      const res = await axios.post(`${API_URL}/v1/proyectos/manual`);
+      const respuestaLista = await axios.get(`${API_URL}/v1/proyectos`);
       setProyectos(respuestaLista.data);
       const nuevoProyecto = respuestaLista.data.find(p => p.id === res.data.id_proyecto);
       if (nuevoProyecto) { abrirFicha(nuevoProyecto); }
     } catch (error) { console.error("Error creando proyecto:", error); }
   };
 
-  // =================================================================
-  // LÓGICA DE FILTRADO Y VISTAS DE TABLA
-  // =================================================================
   const dataAplicacion = tabActual === 0 ? proyectos.filter(p => !isProyectoApp(p)) : proyectos.filter(p => isProyectoApp(p));
 
   let listaMostrar = dataAplicacion;
@@ -826,7 +820,6 @@ function App() {
 
       <AppBar position="static" sx={{ backgroundColor: '#0284c7', boxShadow: 'none' }}>
         <Toolbar sx={{ minHeight: '60px !important', px: { xs: 2, md: 4, lg: 6 } }}>
-          {/* ESPACIO PARA LOGO: Puedes sustituir ElectricBoltIcon por tu imagen oficial de logo */}
           <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
             <ElectricBoltIcon sx={{ color: '#fff', fontSize: 28, mr: 1 }} />
             <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>Proeléctrica</Typography>
@@ -844,7 +837,6 @@ function App() {
       ) : (
         <Box sx={{ flexGrow: 1, px: { xs: 2, md: 4, lg: 6 }, py: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
 
-          {/* BARRA LATERAL DE FILTROS */}
           <Paper elevation={1} sx={{ width: { xs: '100%', md: '220px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
             <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}><Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#64748b', fontSize: '0.8rem' }}>VISTAS Y FILTROS</Typography></Box>
             <List dense disablePadding>
@@ -864,7 +856,6 @@ function App() {
             </List>
           </Paper>
 
-          {/* TABLA PRINCIPAL */}
           <Paper elevation={1} sx={{ flexGrow: 1, padding: '1.5rem', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1e293b' }}>
@@ -952,7 +943,6 @@ function App() {
             <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
               <Box sx={{ flexGrow: 1, overflowY: 'auto', p: '2rem 3rem', backgroundColor: '#fff', minHeight: 0 }}>
 
-                {/* 1. INFORMACIÓN DEL CLIENTE Y UBICACIÓN */}
                 <Box sx={{ mb: 4 }}>
                   <Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px' }}>Información del Cliente y Ubicación</Typography>
                   <Box sx={{ pl: 1 }}>
@@ -1006,7 +996,6 @@ function App() {
                   </Box>
                 </Box>
 
-                {/* 2. DETALLES TÉCNICOS */}
                 <Box sx={{ mb: 4 }}>
                   <Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px' }}>Detalles Técnicos</Typography>
                   <Box sx={{ pl: 1 }}>
@@ -1056,7 +1045,6 @@ function App() {
                   </Box>
                 </Box>
 
-                {/* 3. GESTIÓN GC / PMO ORDENADO */}
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', mb: 3, mt: 4, letterSpacing: '0.5px' }}>Gestión Operativa</Typography>
                   <Box sx={{ pl: 1 }}>

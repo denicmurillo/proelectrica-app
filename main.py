@@ -1,17 +1,26 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, JSON
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+
 from typing import List
 from datetime import datetime
 import time
 
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, Integer, String, JSON
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+
+# Cargar las variables del archivo .env
+load_dotenv()
+
 # ==========================================
-# 1. BASE DE DATOS Y MODELOS
+# 1. BASE DE DATOS Y MODELOS (Supabase)
 # ==========================================
-SQLALCHEMY_DATABASE_URL = "sqlite:///./proelectrica.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Leemos la URL segura desde el entorno
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
