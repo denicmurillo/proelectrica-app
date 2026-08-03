@@ -5,10 +5,8 @@ import {
   TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
   Dialog, DialogTitle, DialogContent, Box, Button, Divider,
   TextField, MenuItem, List, ListItem, ListItemText, ListItemAvatar, Avatar, IconButton,
-  Tabs, Tab, ListItemButton, Slider, Tooltip, Checkbox, ToggleButton, ToggleButtonGroup, Card, CardContent, Grid
+  Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup, Card, CardContent
 } from '@mui/material';
-import FolderIcon from '@mui/icons-material/Folder';
-import SendIcon from '@mui/icons-material/Send';
 import PersonIcon from '@mui/icons-material/Person';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -17,13 +15,13 @@ import AddIcon from '@mui/icons-material/Add';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import EditDocumentIcon from '@mui/icons-material/EditDocument';
 import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
+import SendIcon from '@mui/icons-material/Send';
 
 // =================================================================
 // GRÁFICOS NATIVOS: MUI X CHARTS
@@ -43,6 +41,14 @@ const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
 // =================================================================
 // CONSTANTES Y LISTAS 
 // =================================================================
+const EQUIPO_PROELECTRICA = [
+  "Denic Murillo Murillo",
+  "Andrey Castro Herrera",
+  "Seidy Ortega Pérez",
+  "Jeffry Molina Aguilar",
+  "Allan Gómez Chavarría"
+];
+
 const EMPRESAS_ENCARGADAS = ["Proeléctrica", "Edificaciones", "Investigaciones"];
 const OPCIONES_SINO = ["Sí", "No"];
 const OPCIONES_PAGO = ["Pendiente", "Adelanto y Abonos", "Cancelado"];
@@ -453,7 +459,7 @@ function App() {
   const [pickerCargado, setPickerCargado] = useState(false);
 
   const [datosGC, setDatosGC] = useState({
-    tituloProyecto: '', empresaEncargada: 'Proeléctrica', empresa_solicitante: '', correo_solicitante: '', estado: '', montoCotizado: '', inspector: '',
+    tituloProyecto: '', empresaEncargada: 'Proeléctrica', empresa_solicitante: '', correo_solicitante: '', estado: '', montoCotizado: '', inspector: '', colaboradores: [],
     fechaProgramacion: '', fechaInicio: '', fechaFin: '', seguimiento: '', pago: 'Pendiente', progreso: 0,
     provincia: '', canton: '', distrito: '', exacta: '',
     actividad: '', cantidad_permisos: '', area_m2: '',
@@ -620,6 +626,7 @@ function App() {
       estado: proyecto.estado || 'Nueva Solicitud',
       montoCotizado: proyecto.monto_cotizado || '',
       inspector: proyecto.inspector || '',
+      colaboradores: proyecto.datos_dinamicos?.colaboradores || [],
       fechaProgramacion: formatFechaInput(proyecto.fecha_programacion),
       fechaInicio: formatFechaInput(proyecto.fecha_inicio),
       fechaFin: formatFechaInput(proyecto.fecha_fin),
@@ -672,6 +679,7 @@ function App() {
         resultados_proyecto: nuevosDatosGC.resultadosProyecto,
         talento_requerido: nuevosDatosGC.talentoRequerido,
         otro_talento: nuevosDatosGC.otroTalento,
+        colaboradores: nuevosDatosGC.colaboradores,
         ubicacion: {
           ...proyectoBase.datos_dinamicos?.ubicacion,
           provincia: nuevosDatosGC.provincia,
@@ -732,9 +740,9 @@ function App() {
     }
 
     const nombresLegibles = {
-      tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Correo Electrónico",
+      tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Contacto (Email)",
       estado: "Estado (Status)", seguimiento: "Seguimiento", montoCotizado: "Monto Cotizado", pago: "Estado de Pago", cancelacionPago: "Cancelación del pago", inspector: "Administrador / Inspector",
-      fechaProgramacion: "Fecha de Programación", fechaInicio: "Fecha de Inicio", fechaFin: "Fecha Final", fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)",
+      colaboradores: "Colaboradores", fechaProgramacion: "Fecha de Programación", fechaInicio: "Fecha de Inicio", fechaFin: "Fecha Final", fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)",
       provincia: "Provincia", canton: "Cantón", distrito: "Distrito", exacta: "Dirección Exacta",
       actividad: "Actividad", cantidad_permisos: "Cantidad de Permisos", area_m2: "Área (m²)",
       contactoNombre: "Nombre Contacto", contactoTelefono: "Teléfono Contacto", propietarioNombre: "Nombre Propietario", propietarioCedula: "Cédula Propietario",
@@ -745,7 +753,7 @@ function App() {
     let valorFormateado = valorNuevo;
     if (valorNuevo === '' || valorNuevo === null) valorFormateado = 'Vacío';
     if (campo === 'progreso') valorFormateado = `${valorNuevo}%`;
-    if (campo === 'talentoRequerido') valorFormateado = valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno';
+    if (campo === 'talentoRequerido' || campo === 'colaboradores') valorFormateado = valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno';
 
     const nuevoLog = {
       id: Date.now(), autor: 'Usuario Actual', texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString()
@@ -972,10 +980,6 @@ function App() {
                       <FilaDato etiqueta="Identificador (VBA)" valor={proyectoSeleccionado.identificador_solicitud} colorValor="primary" />
                     )}
 
-                    <FilaEditable etiqueta="Correo Electrónico">
-                      <TextField fullWidth size="small" name="correo_solicitante" value={datosGC.correo_solicitante} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('correo_solicitante', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} />
-                    </FilaEditable>
-
                     <FilaEditable etiqueta="Provincia / Cantón">
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <TextField select fullWidth size="small" name="provincia" value={datosGC.provincia} onChange={(e) => verificarYGuardarCampo('provincia', e.target.value)}>
@@ -1008,6 +1012,10 @@ function App() {
                     <FilaEditable etiqueta="Contacto (Nombre)"><TextField fullWidth size="small" name="contactoNombre" value={datosGC.contactoNombre} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('contactoNombre', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} /></FilaEditable>
                     <FilaEditable etiqueta="Contacto (Teléfono)"><TextField fullWidth size="small" name="contactoTelefono" value={datosGC.contactoTelefono} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('contactoTelefono', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} /></FilaEditable>
 
+                    <FilaEditable etiqueta="Contacto (Email)">
+                      <TextField fullWidth size="small" name="correo_solicitante" value={datosGC.correo_solicitante} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('correo_solicitante', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} />
+                    </FilaEditable>
+
                     {!esVistaProyecto && (
                       <>
                         <FilaEditable etiqueta="Propietario (Nombre)"><TextField fullWidth size="small" name="propietarioNombre" value={datosGC.propietarioNombre} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('propietarioNombre', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} /></FilaEditable>
@@ -1018,7 +1026,7 @@ function App() {
                     {esVistaProyecto && (
                       <>
                         <FilaEditable etiqueta="Resultados del Proyecto">
-                          <TextField fullWidth multiline rows={3} size="small" name="resultadosProyecto" value={datosGC.resultadosProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('resultadosProyecto', e.target.value)} placeholder="Resultados esperados, alcance..." />
+                          <TextField fullWidth multiline rows={4} size="small" name="resultadosProyecto" value={datosGC.resultadosProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('resultadosProyecto', e.target.value)} placeholder="Resultados esperados, alcance..." />
                         </FilaEditable>
 
                         <FilaEditable etiqueta="Talento Requerido">
@@ -1108,7 +1116,15 @@ function App() {
                         </FilaEditable>
 
                         <FilaEditable etiqueta="Administrador">
-                          <TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)}><MenuItem value="Ing. Carlos">Ing. Carlos</MenuItem><MenuItem value="Ing. María">Ing. María</MenuItem><MenuItem value="Ing. José">Ing. José</MenuItem></TextField>
+                          <TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)}>
+                            {EQUIPO_PROELECTRICA.map(nombre => <MenuItem key={nombre} value={nombre}>{nombre}</MenuItem>)}
+                          </TextField>
+                        </FilaEditable>
+
+                        <FilaEditable etiqueta="Colaboradores">
+                          <TextField select fullWidth size="small" name="colaboradores" SelectProps={{ multiple: true }} value={datosGC.colaboradores || []} onChange={(e) => verificarYGuardarCampo('colaboradores', e.target.value)}>
+                            {EQUIPO_PROELECTRICA.map(nombre => <MenuItem key={nombre} value={nombre}>{nombre}</MenuItem>)}
+                          </TextField>
                         </FilaEditable>
 
                         <FilaEditable etiqueta="Fechas (Inicio - Fin)">
@@ -1138,7 +1154,9 @@ function App() {
                         </FilaEditable>
 
                         <FilaEditable etiqueta="Inspector Asignado">
-                          <TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)}><MenuItem value="Ing. Carlos">Ing. Carlos</MenuItem><MenuItem value="Ing. María">Ing. María</MenuItem><MenuItem value="Ing. José">Ing. José</MenuItem></TextField>
+                          <TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)}>
+                            {EQUIPO_PROELECTRICA.map(nombre => <MenuItem key={nombre} value={nombre}>{nombre}</MenuItem>)}
+                          </TextField>
                         </FilaEditable>
 
                         <FilaEditable etiqueta="Fecha Programación">
