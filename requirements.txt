@@ -4,9 +4,3 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 pydantic
-# Agrega cualquier otra librería que hayas importado en main.py
-typing
-datetime
-time
-os
-dotenv
