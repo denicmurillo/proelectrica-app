@@ -116,9 +116,15 @@ class GestionGC(BaseModel):
 # ==========================================
 app = FastAPI(title="API Proeléctrica", version="1.0.0")
 
+# Agregar los orígenes permitidos (¡Cambia la URL de Vercel por la tuya real!)
+origins = [
+    "http://localhost:5173", # Para cuando pruebes en tu computadora
+    "https://proelectrica-app.vercel.app", # ¡La URL pública de tu Frontend!
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
