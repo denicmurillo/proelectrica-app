@@ -1,11 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
 import {
   Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
   Dialog, DialogTitle, DialogContent, Box, Button, Divider,
   TextField, MenuItem, List, ListItem, ListItemText, ListItemAvatar, Avatar, IconButton,
-  Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup, Card, CardContent
+  Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup, Card, CardContent,
+  CircularProgress
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
@@ -21,6 +23,8 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import EditDocumentIcon from '@mui/icons-material/EditDocument';
 import SendIcon from '@mui/icons-material/Send';
+import LogoutIcon from '@mui/icons-material/Logout';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 // =================================================================
 // GRÁFICOS NATIVOS: MUI X CHARTS
@@ -32,10 +36,14 @@ import { BarChart } from '@mui/x-charts/BarChart';
 // ENTORNO Y CREDENCIALES
 // =================================================================
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
+
+// --- CREDENCIALES SUPABASE AUTH ---
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // =================================================================
 // CONSTANTES Y ESTILOS GLOBALES
@@ -75,7 +83,6 @@ const ESTADOS_VERIFICACION = [
 ];
 const SEGUIMIENTO_VERIFICACION = ["Primera inspección", "Reinspección"];
 const PROVINCIAS = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"];
-
 const COLORES_GRAFICOS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#f43f5e', '#64748b'];
 
 const isProyectoApp = (p) => p?.datos_dinamicos?.tipo_registro === 'Proyecto' || p?.datos_dinamicos?.seguimiento_inspeccion === 'Ingreso Manual';
@@ -85,17 +92,70 @@ const safeParseMonto = (val) => {
   return isNaN(num) ? 0 : num;
 };
 
-// Algoritmo de Fecha para Ordenamiento Dinámico
 const getFechaOrdenamiento = (p) => {
   if (isProyectoApp(p)) return p.fecha_inicio || p.datos_dinamicos?.fecha_solicitud || '1970-01-01';
   return p.datos_dinamicos?.fecha_solicitud || p.fecha_programacion || '1970-01-01';
 };
 
 // =================================================================
+// COMPONENTE VISUAL: LOGIN
+// =================================================================
+const LoginScreen = ({ setSession }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg('');
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setErrorMsg('Credenciales inválidas. Por favor, verifica tu correo y contraseña.');
+      setLoading(false);
+    } else {
+      setSession(data.session);
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
+      <Paper elevation={3} sx={{ p: 5, maxWidth: '400px', width: '100%', borderRadius: '12px', textAlign: 'center' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+          <img src="/logo.png" alt="Proeléctrica" style={{ height: '60px' }} onError={(e) => { e.target.style.display = 'none'; }} />
+        </Box>
+        <Typography variant="h5" fontWeight="bold" color="#1e293b" gutterBottom>Acceso al Sistema</Typography>
+        <Typography variant="body2" color="textSecondary" mb={4}>Ingresa tus credenciales corporativas</Typography>
+
+        {errorMsg && (
+          <Box sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', p: 1.5, borderRadius: '6px', mb: 3 }}>
+            <Typography variant="body2" color="#e11d48">{errorMsg}</Typography>
+          </Box>
+        )}
+
+        <form onSubmit={handleLogin}>
+          <TextField fullWidth label="Correo Electrónico" variant="outlined" margin="normal" value={email} onChange={(e) => setEmail(e.target.value)} required type="email" />
+          <TextField fullWidth label="Contraseña" variant="outlined" margin="normal" value={password} onChange={(e) => setPassword(e.target.value)} required type="password" sx={{ mb: 3 }} />
+
+          <Button fullWidth type="submit" variant="contained" color="primary" size="large" disabled={loading} startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <LockOutlinedIcon />} sx={{ borderRadius: '8px', py: 1.2, fontWeight: 'bold', textTransform: 'none' }}>
+            {loading ? 'Verificando...' : 'Iniciar Sesión'}
+          </Button>
+        </form>
+      </Paper>
+    </Box>
+  );
+};
+
+// =================================================================
 // COMPONENTE VISUAL: DASHBOARD ESTRATÉGICO
 // =================================================================
 const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha }) => {
-
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
 
   const calcularMetricasGerencia = () => {
@@ -115,11 +175,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
         }
       }
     });
-
-    const pieData = Object.keys(conteoEmpresas).map((key, index) => ({
-      id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length]
-    })).filter(d => d.value > 0);
-
+    const pieData = Object.keys(conteoEmpresas).map((key, index) => ({ id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length] })).filter(d => d.value > 0);
     return { cuentasPorCobrar, pieData, total: totalFiltrado };
   };
 
@@ -315,6 +371,9 @@ const FilaEditable = ({ etiqueta, children }) => (
 // APLICACIÓN PRINCIPAL
 // =================================================================
 function App() {
+  const [session, setSession] = useState(null);
+  const [authCargando, setAuthCargando] = useState(true);
+
   const [proyectos, setProyectos] = useState([]);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
@@ -349,17 +408,36 @@ function App() {
     estadoActualRef.current = { archivos, bitacora, datosGC, proyectoSeleccionado };
   }, [archivos, bitacora, datosGC, proyectoSeleccionado]);
 
+  // AUTENTICACIÓN
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthCargando(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
     cargarProyectos();
     inicializarGoogleAPIs();
     inyectarSolucionZIndex();
     const intervaloRefresh = setInterval(() => { cargarProyectos(); }, 10000);
     return () => clearInterval(intervaloRefresh);
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [bitacora, modalAbierto]);
+
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut();
+  };
 
   const inyectarSolucionZIndex = () => {
     const style = document.createElement('style');
@@ -409,7 +487,8 @@ function App() {
       let textosBitacora = [];
       data.docs.forEach(doc => { nuevosArchivos.push({ nombre: doc.name, url: doc.url, id: doc.id }); textosBitacora.push(`Adjuntó el archivo: "${doc.name}"`); });
       setArchivos(nuevosArchivos);
-      const nuevosLogs = textosBitacora.map((texto, i) => ({ id: Date.now() + i, autor: 'Sistema', texto, fecha: new Date().toLocaleString() }));
+      const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
+      const nuevosLogs = textosBitacora.map((texto, i) => ({ id: Date.now() + i, autor: nombreUsuario, texto, fecha: new Date().toLocaleString() }));
       const nuevaBitacora = [...currentBitacora, ...nuevosLogs];
       setBitacora(nuevaBitacora);
       autoguardarEnBackend(currentDatosGC, nuevaBitacora, nuevosArchivos, currentProyecto);
@@ -419,7 +498,8 @@ function App() {
   const eliminarArchivo = (indexAEliminar, nombreArchivo) => {
     const nuevosArchivos = archivos.filter((_, index) => index !== indexAEliminar);
     setArchivos(nuevosArchivos);
-    const nuevoLog = { id: Date.now(), autor: 'Sistema', texto: `Eliminó el archivo adjunto: "${nombreArchivo}"`, fecha: new Date().toLocaleString() };
+    const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
+    const nuevoLog = { id: Date.now(), autor: nombreUsuario, texto: `Eliminó el archivo adjunto: "${nombreArchivo}"`, fecha: new Date().toLocaleString() };
     const nuevaBitacora = [...bitacora, nuevoLog];
     setBitacora(nuevaBitacora);
     autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
@@ -606,7 +686,8 @@ function App() {
 
   const agregarComentario = () => {
     if (nuevoComentario.trim() === '') return;
-    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: 'Usuario', texto: nuevoComentario, fecha: new Date().toLocaleString() }];
+    const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
+    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: nuevoComentario, fecha: new Date().toLocaleString() }];
     setBitacora(nuevaBitacora);
     setNuevoComentario('');
     autoguardarEnBackend(datosGC, nuevaBitacora, archivos, proyectoSeleccionado);
@@ -622,6 +703,11 @@ function App() {
     } catch (error) { console.error("Error creando proyecto:", error); }
   };
 
+  // VISTA SI NO HAY SESIÓN ACTIVA
+  if (authCargando) return <Box sx={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
+  if (!session) return <LoginScreen setSession={setSession} />;
+
+  // RENDERIZADO PRINCIPAL (SESIÓN ACTIVA)
   const dataAplicacion = tabActual === 0 ? proyectos.filter(p => !isProyectoApp(p)) : proyectos.filter(p => isProyectoApp(p));
 
   let listaMostrar = dataAplicacion;
@@ -670,15 +756,25 @@ function App() {
     <Box sx={{ backgroundColor: '#f1f5f9', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
 
       <AppBar position="static" sx={{ backgroundColor: '#0284c7', boxShadow: 'none' }}>
-        <Toolbar sx={{ minHeight: '60px !important', px: { xs: 2, md: 4, lg: 6 } }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
-            <img src="/logo.png" alt="Proeléctrica" style={{ height: '38px' }} onError={(e) => { e.target.style.display = 'none'; }} />
+        <Toolbar sx={{ minHeight: '60px !important', px: { xs: 2, md: 4, lg: 6 }, display: 'flex', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
+              <img src="/logo.png" alt="Proeléctrica" style={{ height: '38px' }} onError={(e) => { e.target.style.display = 'none'; }} />
+            </Box>
+            <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
+              <Tab icon={<FactCheckIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
+              <Tab icon={<AccountTreeIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
+              <Tab icon={<DashboardIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
+            </Tabs>
           </Box>
-          <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
-            <Tab icon={<FactCheckIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
-            <Tab icon={<AccountTreeIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
-            <Tab icon={<DashboardIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
-          </Tabs>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography variant="body2" sx={{ mr: 2, fontWeight: 'bold', opacity: 0.9, display: { xs: 'none', md: 'block' } }}>
+              {session.user.email}
+            </Typography>
+            <IconButton color="inherit" onClick={cerrarSesion} title="Cerrar Sesión">
+              <LogoutIcon />
+            </IconButton>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -1037,7 +1133,7 @@ function App() {
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
                   <List disablePadding>
                     {bitacora.map((comentario) => {
-                      const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro inicial)/) || comentario.autor === 'Sistema';
+                      const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado)/) || comentario.autor === 'Sistema';
                       return (
                         <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: esSistema ? 0.5 : 2 }}>
                           <ListItemAvatar sx={{ minWidth: '40px' }}>
