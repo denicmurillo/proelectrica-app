@@ -20,7 +20,6 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import EditDocumentIcon from '@mui/icons-material/EditDocument';
-import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
 import SendIcon from '@mui/icons-material/Send';
 
 // =================================================================
@@ -96,19 +95,23 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
 
   const calcularMetricasGerencia = () => {
     let cuentasPorCobrar = 0;
+    let totalFiltrado = 0;
     const conteoEmpresas = {};
 
     proyectos.forEach(p => {
       const monto = safeParseMonto(p.monto_cotizado);
-      // Asignar "UVIE Proeléctrica" automáticamente a las verificaciones sin empresa
-      const empresa = p.empresa_encargada || (!isProyectoApp(p) ? "UVIE Proeléctrica" : "Sin Asignar");
+      // Lógica UVIE: Si es verificación sin empresa, es UVIE. Si es Proyecto sin empresa, es "Sin Asignar".
+      const empresa = !isProyectoApp(p) ? (p.empresa_encargada || "UVIE Proeléctrica") : (p.empresa_encargada || "Sin Asignar");
       const estadoSeguro = p.estado || '';
 
       conteoEmpresas[empresa] = (conteoEmpresas[empresa] || 0) + 1;
       const pasaFiltro = empresaFiltroGerencia === 'Todas' || empresa === empresaFiltroGerencia;
 
-      if (["Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) {
-        if (pasaFiltro) cuentasPorCobrar += monto;
+      if (pasaFiltro) {
+        totalFiltrado++;
+        if (["Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) {
+          cuentasPorCobrar += monto;
+        }
       }
     });
 
@@ -116,7 +119,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
       id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length]
     })).filter(d => d.value > 0);
 
-    return { cuentasPorCobrar, pieData, total: proyectos.length };
+    return { cuentasPorCobrar, pieData, total: totalFiltrado };
   };
 
   const calcularMetricasPMO = () => {
@@ -132,9 +135,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
     pmoProyectos.forEach(p => {
       const salud = p.salud_proyecto || 'Saludable';
       saludCont[salud] += 1;
-      if (salud === 'Necesita atención' || salud === 'En peligro') {
-        proyectosEnRiesgo.push({ id: p.id, titulo: p.titulo_proyecto, salud });
-      }
+      if (salud === 'Necesita atención' || salud === 'En peligro') proyectosEnRiesgo.push({ id: p.id, titulo: p.titulo_proyecto, salud });
 
       const talentos = p.datos_dinamicos?.talento_requerido || [];
       if (Array.isArray(talentos)) {
@@ -151,25 +152,14 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
           const fechaFinObj = new Date(year, month - 1, day);
           const diasFaltantes = Math.ceil((fechaFinObj.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
-          if (diasFaltantes <= 14) {
-            proyectosCercaVencimiento.push({
-              id: p.id, titulo: p.titulo_proyecto, diasFaltantes, fechaFin: p.fecha_fin
-            });
-          }
+          if (diasFaltantes <= 14) proyectosCercaVencimiento.push({ id: p.id, titulo: p.titulo_proyecto, diasFaltantes, fechaFin: p.fecha_fin });
         }
       }
     });
 
     proyectosCercaVencimiento.sort((a, b) => a.diasFaltantes - b.diasFaltantes);
-
-    const saludData = Object.keys(saludCont).map((key, index) => ({
-      id: index, label: key, value: saludCont[key],
-      color: key === 'Saludable' ? '#10b981' : key === 'Necesita atención' ? '#f59e0b' : '#f43f5e'
-    })).filter(d => d.value > 0);
-
-    const talentoData = Object.keys(talentoCont).map(key => ({
-      name: key, value: talentoCont[key]
-    })).filter(d => d.value > 0).sort((a, b) => b.value - a.value).slice(0, 5);
+    const saludData = Object.keys(saludCont).map((key, index) => ({ id: index, label: key, value: saludCont[key], color: key === 'Saludable' ? '#10b981' : key === 'Necesita atención' ? '#f59e0b' : '#f43f5e' })).filter(d => d.value > 0);
+    const talentoData = Object.keys(talentoCont).map(key => ({ name: key, value: talentoCont[key] })).filter(d => d.value > 0).sort((a, b) => b.value - a.value).slice(0, 5);
 
     return { saludData, talentoData, proyectosCercaVencimiento, proyectosEnRiesgo, totalActivos: pmoProyectos.length };
   };
@@ -187,25 +177,13 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
       const estadoSeguro = p.estado || 'Sin Estado';
       estadosCont[estadoSeguro] = (estadosCont[estadoSeguro] || 0) + 1;
 
-      if (p.datos_dinamicos?.seguimiento_inspeccion) {
-        seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
-      }
-
-      if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) { alertasVBA += 1; }
-
-      if (estadosFlujoCalidad.includes(estadoSeguro)) {
-        informesPendientes.push({
-          id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro
-        });
-      }
+      if (p.datos_dinamicos?.seguimiento_inspeccion) seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
+      if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) alertasVBA += 1;
+      if (estadosFlujoCalidad.includes(estadoSeguro)) informesPendientes.push({ id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro });
     });
 
     const estadosData = Object.keys(estadosCont).map(key => ({ name: key, value: estadosCont[key] })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
-
-    const segData = Object.keys(seguimientoCont).map((key, index) => ({
-      id: index, label: key, value: seguimientoCont[key],
-      color: key === 'Reinspección' ? '#f43f5e' : '#0ea5e9'
-    })).filter(d => d.value > 0);
+    const segData = Object.keys(seguimientoCont).map((key, index) => ({ id: index, label: key, value: seguimientoCont[key], color: key === 'Reinspección' ? '#f43f5e' : '#0ea5e9' })).filter(d => d.value > 0);
 
     return { estadosData, segData, informesPendientes, alertasVBA };
   };
@@ -233,11 +211,12 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
               <MenuItem value="Todas" sx={comunMenuSx}>Todas las Empresas</MenuItem>
               {EMPRESAS_ENCARGADAS.map(e => <MenuItem key={e} value={e} sx={comunMenuSx}>{e}</MenuItem>)}
               <MenuItem value="UVIE Proeléctrica" sx={comunMenuSx}>UVIE Proeléctrica</MenuItem>
+              <MenuItem value="Sin Asignar" sx={comunMenuSx}>Sin Asignar</MenuItem>
             </TextField>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #f43f5e' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Cuentas por Cobrar ({empresaFiltroGerencia})</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AccountBalanceWalletIcon sx={{ color: '#f43f5e', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">₡ {mGerencia.cuentasPorCobrar.toLocaleString('es-CR')}</Typography></Box></CardContent></Card>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Total Operaciones</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography></Box></CardContent></Card>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Total Operaciones ({empresaFiltroGerencia})</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography></Box></CardContent></Card>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
@@ -250,15 +229,8 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
           {mPMO.proyectosEnRiesgo.length > 0 && (
             <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
               <CardContent sx={{ py: '16px !important' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <WarningAmberIcon sx={{ color: '#d97706' }} />
-                  <Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta de Riesgo en Proyectos</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {mPMO.proyectosEnRiesgo.map((p, idx) => (
-                    <Chip key={idx} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff' }} />
-                  ))}
-                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta de Riesgo en Proyectos</Typography></Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosEnRiesgo.map((p, idx) => (<Chip key={idx} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff' }} />))}</Box>
               </CardContent>
             </Card>
           )}
@@ -266,15 +238,8 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
           {mPMO.proyectosCercaVencimiento.length > 0 && (
             <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px' }}>
               <CardContent sx={{ py: '16px !important' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <EventBusyIcon sx={{ color: '#e11d48' }} />
-                  <Typography variant="subtitle1" fontWeight="bold" color="#e11d48">Proyectos Cerca del Límite de Entrega</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {mPMO.proyectosCercaVencimiento.map((p, idx) => (
-                    <Chip key={idx} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff' }} />
-                  ))}
-                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">Proyectos Cerca del Límite de Entrega</Typography></Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosCercaVencimiento.map((p, idx) => (<Chip key={idx} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff' }} />))}</Box>
               </CardContent>
             </Card>
           )}
@@ -292,10 +257,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
             {mGC.alertasVBA > 0 && (
               <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', height: '100%' }}>
                 <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <WarningAmberIcon sx={{ color: '#d97706' }} />
-                    <Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta Documental (VBA)</Typography>
-                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta Documental (VBA)</Typography></Box>
                   <Typography variant="body2" color="#b45309">Existen <strong>{mGC.alertasVBA}</strong> verificaciones en "Nueva Solicitud" que aún no cuentan con un Identificador oficial.</Typography>
                 </CardContent>
               </Card>
@@ -304,16 +266,9 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
             {mGC.informesPendientes.length > 0 && (
               <Card elevation={0} sx={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', height: '100%' }}>
                 <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <EditDocumentIcon sx={{ color: '#15803d' }} />
-                    <Typography variant="subtitle1" fontWeight="bold" color="#15803d">Flujo de Evaluación (ISO 17020)</Typography>
-                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EditDocumentIcon sx={{ color: '#15803d' }} /><Typography variant="subtitle1" fontWeight="bold" color="#15803d">Flujo de Evaluación (ISO 17020)</Typography></Box>
                   <Typography variant="body2" color="#15803d" mb={1}>Verificaciones en proceso operativo y elaboración de informes:</Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {mGC.informesPendientes.map((inf, idx) => (
-                      <Chip key={idx} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff' }} />
-                    ))}
-                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{mGC.informesPendientes.map((inf, idx) => (<Chip key={idx} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff' }} />))}</Box>
                 </CardContent>
               </Card>
             )}
@@ -324,11 +279,11 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
               {mGC.estadosData.length > 0 ? (
                 <BarChart
                   dataset={mGC.estadosData}
-                  xAxis={[{ scaleType: 'band', dataKey: 'name', tickLabelStyle: { angle: -45, textAnchor: 'end', fontSize: 10 } }]}
+                  xAxis={[{ scaleType: 'band', dataKey: 'name', tickLabelStyle: { angle: -45, textAnchor: 'end', fontSize: 11 } }]}
                   yAxis={[{ tickMinStep: 1 }]}
                   series={[{ dataKey: 'value', label: 'Expedientes', color: '#8b5cf6' }]}
-                  height={300}
-                  margin={{ bottom: 100, left: 40, right: 10 }}
+                  height={320}
+                  margin={{ bottom: 120, left: 40, right: 10, top: 40 }}
                 />
               ) : (
                 <Typography color="textSecondary">Sin datos</Typography>
@@ -374,7 +329,6 @@ function App() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
 
-  // Inicializa en Pestaña 1 (Proyectos) y filtro 'Activos'
   const [tabActual, setTabActual] = useState(1);
   const [filtroEstado, setFiltroEstado] = useState('Activos');
   const [vistaDashboard, setVistaDashboard] = useState('Gerencia');
@@ -465,7 +419,7 @@ function App() {
       let textosBitacora = [];
       data.docs.forEach(doc => { nuevosArchivos.push({ nombre: doc.name, url: doc.url, id: doc.id }); textosBitacora.push(`Adjuntó el archivo: "${doc.name}"`); });
       setArchivos(nuevosArchivos);
-      const nuevosLogs = textosBitacora.map((texto, i) => ({ id: Date.now() + i, autor: 'Usuario Actual', texto, fecha: new Date().toLocaleString() }));
+      const nuevosLogs = textosBitacora.map((texto, i) => ({ id: Date.now() + i, autor: 'Sistema', texto, fecha: new Date().toLocaleString() }));
       const nuevaBitacora = [...currentBitacora, ...nuevosLogs];
       setBitacora(nuevaBitacora);
       autoguardarEnBackend(currentDatosGC, nuevaBitacora, nuevosArchivos, currentProyecto);
@@ -475,7 +429,7 @@ function App() {
   const eliminarArchivo = (indexAEliminar, nombreArchivo) => {
     const nuevosArchivos = archivos.filter((_, index) => index !== indexAEliminar);
     setArchivos(nuevosArchivos);
-    const nuevoLog = { id: Date.now(), autor: 'Usuario Actual', texto: `Eliminó el archivo adjunto: "${nombreArchivo}"`, fecha: new Date().toLocaleString() };
+    const nuevoLog = { id: Date.now(), autor: 'Sistema', texto: `Eliminó el archivo adjunto: "${nombreArchivo}"`, fecha: new Date().toLocaleString() };
     const nuevaBitacora = [...bitacora, nuevoLog];
     setBitacora(nuevaBitacora);
     autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
@@ -507,7 +461,6 @@ function App() {
   const abrirFicha = (proyecto) => {
     setProyectoSeleccionado(proyecto);
 
-    // Aseguramos que Colaboradores sea un arreglo
     let colabArray = [];
     if (Array.isArray(proyecto.datos_dinamicos?.colaboradores)) {
       colabArray = proyecto.datos_dinamicos.colaboradores;
@@ -532,7 +485,7 @@ function App() {
       pago: proyecto.pago || 'Pendiente',
       cancelacionPago: proyecto.datos_dinamicos?.cancelacion_pago || 'No',
       progreso: proyecto.progreso || 0,
-      provincia: proyecto.datos_dinamicos?.ubicacion?.provincia || '', // Empieza en blanco
+      provincia: proyecto.datos_dinamicos?.ubicacion?.provincia || '',
       canton: proyecto.datos_dinamicos?.ubicacion?.canton || '',
       distrito: proyecto.datos_dinamicos?.ubicacion?.distrito || '',
       exacta: proyecto.datos_dinamicos?.ubicacion?.exacta || '',
@@ -648,7 +601,7 @@ function App() {
     if (campo === 'progreso') valorFormateado = `${valorNuevo}%`;
     if (campo === 'talentoRequerido' || campo === 'colaboradores') valorFormateado = valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno';
 
-    const nuevoLog = { id: Date.now(), autor: 'Usuario Actual', texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString() };
+    const nuevoLog = { id: Date.now(), autor: 'Sistema', texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString() };
     const nuevaBitacora = [...bitacora, nuevoLog];
     const nuevosDatosGC = { ...datosGC, [campo]: valorNuevo, progreso: progresoAjustado };
 
@@ -662,7 +615,7 @@ function App() {
 
   const agregarComentario = () => {
     if (nuevoComentario.trim() === '') return;
-    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: 'Usuario Actual', texto: nuevoComentario, fecha: new Date().toLocaleString() }];
+    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: 'Usuario', texto: nuevoComentario, fecha: new Date().toLocaleString() }];
     setBitacora(nuevaBitacora);
     setNuevoComentario('');
     autoguardarEnBackend(datosGC, nuevaBitacora, archivos, proyectoSeleccionado);
@@ -693,6 +646,9 @@ function App() {
     }
   }
 
+  // ORDENAR: El más reciente primero (por ID mayor)
+  const listaMostrarOrdenada = [...listaMostrar].sort((a, b) => b.id - a.id);
+
   const contarPorGrupo = (grupoEstados) => dataAplicacion.filter(p => p.estado && grupoEstados.some(est => p.estado.includes(est))).length;
 
   const renderizarEstado = (estadoBackend) => {
@@ -711,7 +667,6 @@ function App() {
   const tableCellSx = { fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px', py: 1.5 };
   const tableHeadSx = { ...tableCellSx, fontWeight: 'bold', color: '#475569' };
 
-  // --- Listas Inteligentes ---
   const inspectorOpciones = [...new Set([...EQUIPO_PROELECTRICA, datosGC.inspector])].filter(Boolean);
   const colabOpciones = [...new Set([...EQUIPO_PROELECTRICA, ...(datosGC.colaboradores || [])])].filter(Boolean);
 
@@ -721,7 +676,10 @@ function App() {
       <AppBar position="static" sx={{ backgroundColor: '#0284c7', boxShadow: 'none' }}>
         <Toolbar sx={{ minHeight: '60px !important', px: { xs: 2, md: 4, lg: 6 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
-            <ElectricBoltIcon sx={{ color: '#fff', fontSize: 28, mr: 1 }} />
+            {/* EL LOGOTIPO */}
+            <img src="/logo.png" alt="Proeléctrica" style={{ height: '35px', marginRight: '10px' }}
+              onError={(e) => { e.target.style.display = 'none'; }} // Se oculta si no encuentra el archivo aún
+            />
             <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>Proeléctrica</Typography>
           </Box>
           <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
@@ -789,10 +747,10 @@ function App() {
                   )}
                 </TableHead>
                 <TableBody>
-                  {listaMostrar.length === 0 ? (
+                  {listaMostrarOrdenada.length === 0 ? (
                     <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para este filtro.</TableCell></TableRow>
                   ) : (
-                    listaMostrar.map((proyecto) => (
+                    listaMostrarOrdenada.map((proyecto) => (
                       <TableRow key={proyecto.id} hover style={{ cursor: 'pointer' }} onClick={() => abrirFicha(proyecto)}>
                         {tabActual === 0 ? (
                           <>
@@ -1080,20 +1038,62 @@ function App() {
 
               {/* COLUMNA DERECHA: BITÁCORA */}
               <Box sx={{ width: '380px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9' }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bitácora y Actividad</Typography></Box>
+                <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9' }}>
+                  <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bitácora y Actividad</Typography>
+                </Box>
+
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
                   <List disablePadding>
-                    {bitacora.map((comentario) => (
-                      <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 1 }}>
-                        <ListItemAvatar sx={{ minWidth: '40px' }}><Avatar sx={{ width: 32, height: 32, bgcolor: '#cbd5e1' }}><PersonIcon fontSize="small" /></Avatar></ListItemAvatar>
-                        <ListItemText primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color="textPrimary">{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{comentario.fecha}</Typography></Box>} secondary={<Typography variant="body2" color="textPrimary" sx={{ mt: 0.5, backgroundColor: '#fff', p: 1.5, borderRadius: '4px', border: '1px solid #e2e8f0', wordBreak: 'break-word' }}>{comentario.texto}</Typography>} />
-                      </ListItem>
-                    ))}
+                    {bitacora.map((comentario) => {
+                      // Estética tipo PODIO: Detección inteligente de Logs del Sistema vs Comentarios Humanos
+                      const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro inicial)/) || comentario.autor === 'Sistema';
+
+                      return (
+                        <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: esSistema ? 0.5 : 2 }}>
+                          <ListItemAvatar sx={{ minWidth: '40px' }}>
+                            <Avatar sx={{ width: 32, height: 32, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}>
+                              <PersonIcon fontSize="small" sx={{ color: esSistema ? '#94a3b8' : '#fff' }} />
+                            </Avatar>
+                          </ListItemAvatar>
+
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                <Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>
+                                  {comentario.autor}
+                                </Typography>
+                                <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>
+                                  {comentario.fecha}
+                                </Typography>
+                              </Box>
+                            }
+                            secondary={
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  mt: 0.5,
+                                  color: esSistema ? '#6b7280' : '#111827',
+                                  fontStyle: esSistema ? 'italic' : 'normal',
+                                  backgroundColor: esSistema ? 'transparent' : '#fff',
+                                  p: esSistema ? 0 : 1.5,
+                                  border: esSistema ? 'none' : '1px solid #e2e8f0',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8rem',
+                                  wordBreak: 'break-word'
+                                }}
+                              >
+                                {comentario.texto}
+                              </Typography>
+                            }
+                          />
+                        </ListItem>
+                      );
+                    })}
                     <div ref={chatEndRef} />
                   </List>
                 </Box>
                 <Box sx={{ flexShrink: 0, p: 2, backgroundColor: '#fff', borderTop: '1px solid #e2e8f0' }}>
-                  <TextField fullWidth multiline maxRows={3} size="small" placeholder="Escribir en bitácora..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} sx={{ backgroundColor: '#f8fafc', mb: 1, ...comunInputSx }} />
+                  <TextField fullWidth multiline maxRows={3} size="small" placeholder="Añade un comentario..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} sx={{ backgroundColor: '#fff', mb: 1, ...comunInputSx }} />
                   <Button fullWidth variant="contained" endIcon={<SendIcon />} size="small" onClick={agregarComentario} sx={{ textTransform: 'none', borderRadius: '4px' }}>Comentar</Button>
                 </Box>
               </Box>
