@@ -41,8 +41,8 @@ const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
 // =================================================================
 // CONSTANTES Y ESTILOS GLOBALES
 // =================================================================
-const comunInputSx = { '& .MuiInputBase-root': { fontSize: '0.875rem' } }; // Fuerza letra pequeña en inputs
-const comunMenuSx = { fontSize: '0.875rem' }; // Fuerza letra pequeña en desplegables
+const comunInputSx = { '& .MuiInputBase-root': { fontSize: '0.875rem' } };
+const comunMenuSx = { fontSize: '0.875rem' };
 
 const EQUIPO_PROELECTRICA = [
   "Denic Murillo Murillo",
@@ -95,12 +95,13 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
 
   const calcularMetricasGerencia = () => {
-    let cobradoGeneral = 0; let cobradoFiltrado = 0; let cuentasPorCobrar = 0;
+    let cuentasPorCobrar = 0;
     const conteoEmpresas = {};
 
     proyectos.forEach(p => {
       const monto = safeParseMonto(p.monto_cotizado);
-      const empresa = p.empresa_encargada || "Sin Asignar";
+      // Asignar "UVIE Proeléctrica" automáticamente a las verificaciones sin empresa
+      const empresa = p.empresa_encargada || (!isProyectoApp(p) ? "UVIE Proeléctrica" : "Sin Asignar");
       const estadoSeguro = p.estado || '';
 
       conteoEmpresas[empresa] = (conteoEmpresas[empresa] || 0) + 1;
@@ -109,21 +110,13 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
       if (["Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) {
         if (pasaFiltro) cuentasPorCobrar += monto;
       }
-
-      const esVerifCobrada = !isProyectoApp(p) && p.datos_dinamicos?.cancelacion_pago === 'Sí';
-      const esProyCobrado = isProyectoApp(p) && estadoSeguro === 'Pago recibido y proyecto archivado';
-
-      if (esVerifCobrada || esProyCobrado) {
-        cobradoGeneral += monto;
-        if (pasaFiltro) cobradoFiltrado += monto;
-      }
     });
 
     const pieData = Object.keys(conteoEmpresas).map((key, index) => ({
       id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length]
     })).filter(d => d.value > 0);
 
-    return { cobradoGeneral, cobradoFiltrado, cuentasPorCobrar, pieData, total: proyectos.length };
+    return { cuentasPorCobrar, pieData, total: proyectos.length };
   };
 
   const calcularMetricasPMO = () => {
@@ -239,22 +232,53 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
             <TextField select size="small" label="Filtrar por Empresa" value={empresaFiltroGerencia} onChange={(e) => setEmpresaFiltroGerencia(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', ...comunInputSx }}>
               <MenuItem value="Todas" sx={comunMenuSx}>Todas las Empresas</MenuItem>
               {EMPRESAS_ENCARGADAS.map(e => <MenuItem key={e} value={e} sx={comunMenuSx}>{e}</MenuItem>)}
+              <MenuItem value="UVIE Proeléctrica" sx={comunMenuSx}>UVIE Proeléctrica</MenuItem>
             </TextField>
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 3 }}>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #10b981' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Capital Cobrado ({empresaFiltroGerencia})</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AccountBalanceWalletIcon sx={{ color: '#10b981', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">₡ {mGerencia.cobradoFiltrado.toLocaleString('es-CR')}</Typography></Box></CardContent></Card>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #f43f5e' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Cuentas por Cobrar ({empresaFiltroGerencia})</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AccountBalanceWalletIcon sx={{ color: '#f43f5e', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">₡ {mGerencia.cuentasPorCobrar.toLocaleString('es-CR')}</Typography></Box></CardContent></Card>
             <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Total Operaciones</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography></Box></CardContent></Card>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
-            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
+            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
           </Box>
         </Box>
       )}
 
-      {/* Otras vistas simplificadas en código para ahorrar espacio visual, su lógica sigue intacta */}
       {vistaDashboard === 'PMO' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {mPMO.proyectosEnRiesgo.length > 0 && (
+            <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
+              <CardContent sx={{ py: '16px !important' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <WarningAmberIcon sx={{ color: '#d97706' }} />
+                  <Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta de Riesgo en Proyectos</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {mPMO.proyectosEnRiesgo.map((p, idx) => (
+                    <Chip key={idx} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff' }} />
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+
+          {mPMO.proyectosCercaVencimiento.length > 0 && (
+            <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px' }}>
+              <CardContent sx={{ py: '16px !important' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <EventBusyIcon sx={{ color: '#e11d48' }} />
+                  <Typography variant="subtitle1" fontWeight="bold" color="#e11d48">Proyectos Cerca del Límite de Entrega</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {mPMO.proyectosCercaVencimiento.map((p, idx) => (
+                    <Chip key={idx} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff' }} />
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Radar de Salud (Activos)</Typography>{mPMO.saludData.length > 0 ? <PieChart series={[{ data: mPMO.saludData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
             <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Top 5: Talento Requerido</Typography>{mPMO.talentoData.length > 0 ? <BarChart dataset={mPMO.talentoData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Unidades', color: '#0ea5e9' }]} layout="horizontal" height={250} margin={{ left: 120 }} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
@@ -263,9 +287,58 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard }) => {
       )}
 
       {vistaDashboard === 'GC' && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
-          <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución de Estados</Typography>{mGC.estadosData.length > 0 ? <BarChart dataset={mGC.estadosData} xAxis={[{ scaleType: 'band', dataKey: 'name', tickLabelStyle: { angle: -45, textAnchor: 'end', fontSize: 10 } }]} yAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Expedientes', color: '#8b5cf6' }]} height={260} margin={{ bottom: 80 }} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
-          <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Índice Reinspecciones</Typography>{mGC.segData.length > 0 ? <PieChart series={[{ data: mGC.segData }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+            {mGC.alertasVBA > 0 && (
+              <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', height: '100%' }}>
+                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <WarningAmberIcon sx={{ color: '#d97706' }} />
+                    <Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta Documental (VBA)</Typography>
+                  </Box>
+                  <Typography variant="body2" color="#b45309">Existen <strong>{mGC.alertasVBA}</strong> verificaciones en "Nueva Solicitud" que aún no cuentan con un Identificador oficial.</Typography>
+                </CardContent>
+              </Card>
+            )}
+
+            {mGC.informesPendientes.length > 0 && (
+              <Card elevation={0} sx={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', height: '100%' }}>
+                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <EditDocumentIcon sx={{ color: '#15803d' }} />
+                    <Typography variant="subtitle1" fontWeight="bold" color="#15803d">Flujo de Evaluación (ISO 17020)</Typography>
+                  </Box>
+                  <Typography variant="body2" color="#15803d" mb={1}>Verificaciones en proceso operativo y elaboración de informes:</Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {mGC.informesPendientes.map((inf, idx) => (
+                      <Chip key={idx} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff' }} />
+                    ))}
+                  </Box>
+                </CardContent>
+              </Card>
+            )}
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
+            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+              <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución de Estados</Typography>
+              {mGC.estadosData.length > 0 ? (
+                <BarChart
+                  dataset={mGC.estadosData}
+                  xAxis={[{ scaleType: 'band', dataKey: 'name', tickLabelStyle: { angle: -45, textAnchor: 'end', fontSize: 10 } }]}
+                  yAxis={[{ tickMinStep: 1 }]}
+                  series={[{ dataKey: 'value', label: 'Expedientes', color: '#8b5cf6' }]}
+                  height={300}
+                  margin={{ bottom: 100, left: 40, right: 10 }}
+                />
+              ) : (
+                <Typography color="textSecondary">Sin datos</Typography>
+              )}
+            </Paper>
+            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+              <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Índice Reinspecciones</Typography>
+              {mGC.segData.length > 0 ? <PieChart series={[{ data: mGC.segData }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}
+            </Paper>
+          </Box>
         </Box>
       )}
 
@@ -651,7 +724,7 @@ function App() {
             <ElectricBoltIcon sx={{ color: '#fff', fontSize: 28, mr: 1 }} />
             <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', letterSpacing: '0.5px' }}>Proeléctrica</Typography>
           </Box>
-          <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); setFiltroEstado('Todos'); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
+          <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
             <Tab icon={<FactCheckIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
             <Tab icon={<AccountTreeIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
             <Tab icon={<DashboardIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
