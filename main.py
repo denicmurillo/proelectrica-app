@@ -15,7 +15,6 @@ from googleapiclient.discovery import build
 # =================================================================
 # 1. BASE DE DATOS Y MODELOS
 # =================================================================
-# NOTA: Reemplaza con tu DATABASE_URL real de Supabase
 SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./proelectrica.db")
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -46,13 +45,13 @@ class ProyectoDB(Base):
 
 class TareaDB(Base):
     __tablename__ = "tareas"
-    id = Column(BIGINT, primary_key=True, index=True)
-    id_proyecto = Column(BIGINT, ForeignKey("proyectos.id", ondelete="CASCADE"))
+    id = Column(Integer, primary_key=True, index=True)
+    id_proyecto = Column(Integer, ForeignKey("proyectos.id", ondelete="CASCADE"))
     descripcion = Column(String, nullable=False)
-    asignado_a = Column(String, nullable=False) # Correo del colaborador
+    asignado_a = Column(String, nullable=False) 
     asignado_por = Column(String, nullable=False)
     estado = Column(String, default="Pendiente")
-    fecha_limite = Column(String, nullable=True) # Formato YYYY-MM-DD
+    fecha_limite = Column(String, nullable=True) 
     enlace_calendario = Column(String, nullable=True)
     created_at = Column(String, default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -115,35 +114,51 @@ class TareaCrear(BaseModel):
     descripcion: str
     asignado_a: str
     asignado_por: str
+    correo_asignador: str
     fecha_limite: str
 
 # =================================================================
 # 3. MOTOR DE GOOGLE CALENDAR
 # =================================================================
-def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invitado: str, fecha: str):
-    """Crea un evento usando la Cuenta de Servicio y envía invitación por correo"""
+def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invitado: str, fecha: str, correo_asignador: str):
+    """Crea un evento asumiendo la identidad del usuario conectado"""
     SERVICE_ACCOUNT_FILE = 'google-credentials.json'
     SCOPES = ['https://www.googleapis.com/auth/calendar.events']
     
     if not os.path.exists(SERVICE_ACCOUNT_FILE):
-        print("⚠️ ADVERTENCIA: No se encontró 'google-credentials.json'. La tarea se guardará, pero la invitación de Google Calendar no se enviará.")
+        print("⚠️ ADVERTENCIA: No se encontró 'google-credentials.json'.")
         return None
         
     try:
-        creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        # El robot asume la identidad de quien asigna la tarea
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, 
+            scopes=SCOPES
+        ).with_subject(correo_asignador)
+        
         service = build('calendar', 'v3', credentials=creds)
         
-        # Estructura del Evento (Día completo)
         evento = {
             'summary': f"Inspección/Tarea: {titulo_proyecto}",
             'description': f"Tarea asignada desde Proeléctrica PMO:\n\n{descripcion}",
-            'start': {'date': fecha},
-            'end': {'date': fecha},
+            'start': {
+                'dateTime': f"{fecha}T08:00:00-06:00",
+                'timeZone': 'America/Costa_Rica',
+            },
+            'end': {
+                'dateTime': f"{fecha}T17:00:00-06:00",
+                'timeZone': 'America/Costa_Rica',
+            },
             'attendees': [{'email': correo_invitado}],
-            'reminders': {'useDefault': True},
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'popup', 'minutes': 870}, 
+                    {'method': 'email', 'minutes': 870},
+                ]
+            },
         }
         
-        # sendUpdates='all' es el parámetro mágico que dispara el correo a los invitados
         evento_creado = service.events().insert(calendarId='primary', body=evento, sendUpdates='all').execute()
         return evento_creado.get('htmlLink')
         
@@ -171,7 +186,7 @@ def get_db():
     finally:
         db.close()
 
-# --- RUTAS DE PROYECTOS (Mantenidas y Optimizadas) ---
+# --- RUTAS DE PROYECTOS ---
 @app.get("/v1/proyectos", status_code=200)
 async def listar_proyectos(db: Session = Depends(get_db)):
     return db.query(ProyectoDB).order_by(ProyectoDB.id.desc()).all()
@@ -235,18 +250,16 @@ async def actualizar_gestion_gc(id_proyecto: int, payload: GestionGC, db: Sessio
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- NUEVAS RUTAS: MOTOR DE TAREAS ---
+# --- RUTAS DE TAREAS ---
 @app.post("/v1/proyectos/{id_proyecto}/tareas", status_code=201)
 async def crear_tarea(id_proyecto: int, payload: TareaCrear, db: Session = Depends(get_db)):
     try:
         proyecto = db.query(ProyectoDB).filter(ProyectoDB.id == id_proyecto).first()
         if not proyecto: raise HTTPException(status_code=404, detail="Proyecto no encontrado")
         
-        # 1. Llamar al Robot de Google Calendar
         titulo_ev = proyecto.titulo_proyecto if proyecto.titulo_proyecto else proyecto.empresa_solicitante
-        enlace_cal = crear_evento_calendario(titulo_ev, payload.descripcion, payload.asignado_a, payload.fecha_limite)
+        enlace_cal = crear_evento_calendario(titulo_ev, payload.descripcion, payload.asignado_a, payload.fecha_limite, payload.correo_asignador)
         
-        # 2. Guardar la tarea en Base de Datos
         nueva_tarea = TareaDB(
             id_proyecto=id_proyecto,
             descripcion=payload.descripcion,
@@ -257,7 +270,6 @@ async def crear_tarea(id_proyecto: int, payload: TareaCrear, db: Session = Depen
         )
         db.add(nueva_tarea)
         
-        # 3. Anotar en la bitácora del proyecto
         bitacora_actual = proyecto.bitacora if proyecto.bitacora else []
         nuevo_log = {
             "id": int(time.time() * 1000),
@@ -275,14 +287,11 @@ async def crear_tarea(id_proyecto: int, payload: TareaCrear, db: Session = Depen
 
 @app.get("/v1/proyectos/{id_proyecto}/tareas", status_code=200)
 async def listar_tareas_proyecto(id_proyecto: int, db: Session = Depends(get_db)):
-    tareas = db.query(TareaDB).filter(TareaDB.id_proyecto == id_proyecto).order_by(TareaDB.id.desc()).all()
-    return tareas
+    return db.query(TareaDB).filter(TareaDB.id_proyecto == id_proyecto).order_by(TareaDB.id.desc()).all()
 
 @app.get("/v1/tareas/operativo/{correo}", status_code=200)
 async def listar_mis_tareas(correo: str, db: Session = Depends(get_db)):
-    """Este endpoint alimenta el Panel Operativo del Dashboard"""
     tareas = db.query(TareaDB).filter(TareaDB.asignado_a == correo, TareaDB.estado == 'Pendiente').order_by(TareaDB.fecha_limite.asc()).all()
-    # Enriquecer las tareas con el nombre del proyecto para el Dashboard
     resultado = []
     for t in tareas:
         proy = db.query(ProyectoDB).filter(ProyectoDB.id == t.id_proyecto).first()
@@ -306,7 +315,6 @@ async def completar_tarea(id_tarea: int, db: Session = Depends(get_db)):
         
         tarea.estado = "Completada"
         
-        # Anotar en bitácora del proyecto
         proyecto = db.query(ProyectoDB).filter(ProyectoDB.id == tarea.id_proyecto).first()
         if proyecto:
             bitacora_actual = proyecto.bitacora if proyecto.bitacora else []
