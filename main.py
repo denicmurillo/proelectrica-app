@@ -120,20 +120,24 @@ class TareaCrear(BaseModel):
 # =================================================================
 # 3. MOTOR DE GOOGLE CALENDAR
 # =================================================================
+
 def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invitado: str, fecha: str, correo_asignador: str):
     """Crea un evento asumiendo la identidad del usuario conectado"""
-    SERVICE_ACCOUNT_FILE = 'google-credentials.json'
-    SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+    
+    # MAGIA ENTERPRISE: Búsqueda inteligente de la ruta (Render vs Local)
+    ruta_render = '/etc/secrets/google-credentials.json'
+    ruta_local = 'google-credentials.json'
+    SERVICE_ACCOUNT_FILE = ruta_render if os.path.exists(ruta_render) else ruta_local
     
     if not os.path.exists(SERVICE_ACCOUNT_FILE):
-        print("⚠️ ADVERTENCIA: No se encontró 'google-credentials.json'.")
+        print(f"⚠️ ADVERTENCIA: No se encontró el archivo JSON en {SERVICE_ACCOUNT_FILE}.")
         return None
         
     try:
         # El robot asume la identidad de quien asigna la tarea
         creds = service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_FILE, 
-            scopes=SCOPES
+            scopes=['https://www.googleapis.com/auth/calendar.events']
         ).with_subject(correo_asignador)
         
         service = build('calendar', 'v3', credentials=creds)
