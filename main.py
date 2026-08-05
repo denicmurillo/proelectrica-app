@@ -122,44 +122,44 @@ class TareaCrear(BaseModel):
 # =================================================================
 
 def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invitado: str, fecha: str, correo_asignador: str):
-    """Crea un evento asumiendo la identidad del usuario conectado"""
+    """Crea un evento asumiendo la identidad del usuario conectado (Todo el día, sin notificaciones)"""
+    SCOPES = ['https://www.googleapis.com/auth/calendar.events']
     
-    # MAGIA ENTERPRISE: Búsqueda inteligente de la ruta (Render vs Local)
-    ruta_render = '/etc/secrets/google-credentials.json'
-    ruta_local = 'google-credentials.json'
-    SERVICE_ACCOUNT_FILE = ruta_render if os.path.exists(ruta_render) else ruta_local
+    # MAGIA ENTERPRISE: Buscador de rutas robusto para Render y Local
+    rutas_posibles = [
+        '/etc/secrets/google-credentials.json',             # Bóveda estándar de Render
+        '/opt/render/project/src/google-credentials.json',  # Raíz de proyecto en Render
+        'google-credentials.json'                           # Entorno Local
+    ]
     
-    if not os.path.exists(SERVICE_ACCOUNT_FILE):
-        print(f"⚠️ ADVERTENCIA: No se encontró el archivo JSON en {SERVICE_ACCOUNT_FILE}.")
+    SERVICE_ACCOUNT_FILE = None
+    for ruta in rutas_posibles:
+        if os.path.exists(ruta):
+            SERVICE_ACCOUNT_FILE = ruta
+            break
+            
+    if not SERVICE_ACCOUNT_FILE:
+        print("⚠️ ADVERTENCIA: No se encontró 'google-credentials.json' en los servidores de Render ni en Local.")
         return None
         
     try:
         # El robot asume la identidad de quien asigna la tarea
         creds = service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_FILE, 
-            scopes=['https://www.googleapis.com/auth/calendar.events']
+            scopes=SCOPES
         ).with_subject(correo_asignador)
         
         service = build('calendar', 'v3', credentials=creds)
         
+        # EVENTO "TODO EL DÍA" Y SIN NOTIFICACIONES
         evento = {
             'summary': f"Inspección/Tarea: {titulo_proyecto}",
             'description': f"Tarea asignada desde Proeléctrica PMO:\n\n{descripcion}",
-            'start': {
-                'dateTime': f"{fecha}T08:00:00-06:00",
-                'timeZone': 'America/Costa_Rica',
-            },
-            'end': {
-                'dateTime': f"{fecha}T17:00:00-06:00",
-                'timeZone': 'America/Costa_Rica',
-            },
+            'start': {'date': fecha}, # Al usar 'date' en lugar de 'dateTime', Google lo hace "Todo el día"
+            'end': {'date': fecha},
             'attendees': [{'email': correo_invitado}],
             'reminders': {
-                'useDefault': False,
-                'overrides': [
-                    {'method': 'popup', 'minutes': 870}, 
-                    {'method': 'email', 'minutes': 870},
-                ]
+                'useDefault': False # Apaga cualquier notificación programada
             },
         }
         
