@@ -594,9 +594,9 @@ function App() {
   let listaMostrar = dataAplicacion;
   if (filtroEstado !== 'Todos') {
     if (filtroEstado === 'Cotizaciones') listaMostrar = dataAplicacion.filter(p => p.estado && ["Nueva Solicitud", "Solicitud Generada", "Cotización"].includes(p.estado));
-    else if (filtroEstado === 'Activos') listaMostrar = dataAplicacion.filter(p => p.estado && ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador"].includes(p.estado));
+    else if (filtroEstado === 'Activos') listaMostrar = dataAplicacion.filter(p => p.estado && ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].includes(p.estado));
     else if (filtroEstado === 'Facturación') listaMostrar = dataAplicacion.filter(p => p.estado && ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(p.estado));
-    else if (filtroEstado === 'Archivados') listaMostrar = dataAplicacion.filter(p => p.estado && ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Adjudicado y pagado", "Finalizado y entregado"].includes(p.estado));
+    else if (filtroEstado === 'Archivados') listaMostrar = dataAplicacion.filter(p => p.estado && ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(p.estado));
   }
 
   const listaMostrarOrdenada = [...listaMostrar].sort((a, b) => {
@@ -610,9 +610,9 @@ function App() {
   const renderizarEstado = (estadoBackend) => {
     let color = 'default'; const estadoSeguro = estadoBackend || '';
     if (["Nueva Solicitud", "Solicitud Generada", "Cotización"].includes(estadoSeguro)) color = 'warning';
-    if (["Adjudicado", "En progreso", "Revisión", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador"].some(s => estadoSeguro.includes(s))) color = 'info';
+    if (["Adjudicado", "En progreso", "Revisión", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].some(s => estadoSeguro.includes(s))) color = 'info';
     if (["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) color = 'primary';
-    if (estadoSeguro.includes('archivado') || estadoSeguro.includes('pagado') || estadoSeguro.includes('entregado') || estadoSeguro === 'Finalizado') color = 'success';
+    if (["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(estadoSeguro)) color = 'success';
     return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
   };
 
@@ -653,6 +653,40 @@ function App() {
           <Paper elevation={1} sx={{ width: { xs: '100%', md: '220px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
             <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}><Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#64748b', fontSize: '0.8rem' }}>VISTAS Y FILTROS</Typography></Box>
             <List dense disablePadding>
+              <ListItemButton selected={filtroEstado === 'Todos'} onClick={() => setFiltroEstado('Todos')}>
+                <ListItemText primary="Todos los registros" sx={{ '& .MuiListItemText-primary': { fontWeight: filtroEstado === 'Todos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                <Chip label={dataAplicacion.length} size="small" sx={{ height: '20px', fontSize: '0.7rem' }} />
+              </ListItemButton>
+              <Divider />
+
+              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#8b5cf6', fontSize: '0.7rem' }}>COTIZACIONES</Typography></Box>
+              <ListItemButton selected={filtroEstado === 'Cotizaciones'} onClick={() => setFiltroEstado('Cotizaciones')}>
+                <ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#7c3aed', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Nueva Solicitud", "Solicitud Generada", "Cotización"])}</Typography>
+              </ListItemButton>
+              <Divider />
+
+              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#dc2626', fontSize: '0.7rem' }}>PROYECTOS ACTIVOS</Typography></Box>
+              <ListItemButton selected={filtroEstado === 'Activos'} onClick={() => setFiltroEstado('Activos')}>
+                <ListItemText primary="Mostrar Activos" sx={{ '& .MuiListItemText-primary': { color: '#dc2626', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"])}</Typography>
+              </ListItemButton>
+              <Divider />
+
+              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f59e0b', fontSize: '0.7rem' }}>FACTURACIÓN Y COBRO</Typography></Box>
+              <ListItemButton selected={filtroEstado === 'Facturación'} onClick={() => setFiltroEstado('Facturación')}>
+                <ListItemText primary="Mostrar Pendientes" sx={{ '& .MuiListItemText-primary': { color: '#d97706', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"])}</Typography>
+              </ListItemButton>
+              <Divider />
+
+              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#2563eb', fontSize: '0.7rem' }}>ARCHIVADOS</Typography></Box>
+              <ListItemButton selected={filtroEstado === 'Archivados'} onClick={() => setFiltroEstado('Archivados')}>
+                <ListItemText primary="Mostrar Archivados" sx={{ '& .MuiListItemText-primary': { color: '#2563eb', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"])}</Typography>
+              </ListItemButton>
+            </List>
+            {/* <List dense disablePadding>
               <ListItemButton selected={filtroEstado === 'Todos'} onClick={() => setFiltroEstado('Todos')}><ListItemText primary="Todos los registros" sx={{ '& .MuiListItemText-primary': { fontWeight: filtroEstado === 'Todos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} /><Chip label={dataAplicacion.length} size="small" sx={{ height: '20px', fontSize: '0.7rem' }} /></ListItemButton><Divider />
               <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#8b5cf6', fontSize: '0.7rem' }}>COTIZACIONES</Typography></Box>
               <ListItemButton selected={filtroEstado === 'Cotizaciones'} onClick={() => setFiltroEstado('Cotizaciones')}><ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#7c3aed', fontSize: '0.85rem' } }} /><Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Nueva Solicitud", "Solicitud Generada", "Cotización"])}</Typography></ListItemButton><Divider />
@@ -662,7 +696,7 @@ function App() {
               <ListItemButton selected={filtroEstado === 'Facturación'} onClick={() => setFiltroEstado('Facturación')}><ListItemText primary="Mostrar Pendientes" sx={{ '& .MuiListItemText-primary': { color: '#d97706', fontSize: '0.85rem' } }} /><Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"])}</Typography></ListItemButton><Divider />
               <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#2563eb', fontSize: '0.7rem' }}>ARCHIVADOS</Typography></Box>
               <ListItemButton selected={filtroEstado === 'Archivados'} onClick={() => setFiltroEstado('Archivados')}><ListItemText primary="Mostrar Archivados" sx={{ '& .MuiListItemText-primary': { color: '#2563eb', fontSize: '0.85rem' } }} /><Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Adjudicado y pagado", "Finalizado y entregado"])}</Typography></ListItemButton>
-            </List>
+            </List> */}
           </Paper>
 
           <Paper elevation={1} sx={{ flexGrow: 1, padding: '1.5rem', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
