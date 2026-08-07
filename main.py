@@ -310,6 +310,26 @@ async def listar_mis_tareas(correo: str, db: Session = Depends(get_db)):
             "enlace_calendario": t.enlace_calendario
         })
     return resultado
+    
+@app.get("/v1/tareas/activas", status_code=200)
+async def listar_todas_tareas_activas(db: Session = Depends(get_db)):
+    """Este endpoint trae todas las tareas pendientes de toda la empresa"""
+    tareas = db.query(TareaDB).filter(TareaDB.estado == 'Pendiente').order_by(TareaDB.fecha_limite.asc()).all()
+    resultado = []
+    for t in tareas:
+        proy = db.query(ProyectoDB).filter(ProyectoDB.id == t.id_proyecto).first()
+        nombre_proy = proy.titulo_proyecto if proy.titulo_proyecto else proy.empresa_solicitante if proy else "Desconocido"
+        resultado.append({
+            "id": t.id,
+            "proyecto": nombre_proy,
+            "id_proyecto": t.id_proyecto,
+            "descripcion": t.descripcion,
+            "asignado_a": t.asignado_a,
+            "asignado_por": t.asignado_por,
+            "fecha_limite": t.fecha_limite,
+            "enlace_calendario": t.enlace_calendario
+        })
+    return resultado
 
 @app.put("/v1/tareas/{id_tarea}/completar", status_code=200)
 async def completar_tarea(id_tarea: int, db: Session = Depends(get_db)):

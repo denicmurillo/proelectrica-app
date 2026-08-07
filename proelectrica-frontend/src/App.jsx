@@ -116,8 +116,9 @@ const LoginScreen = ({ setSession }) => {
 };
 
 // --- DASHBOARD ESTRATÉGICO ---
-const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, misTareas, completarTarea }) => {
+const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual }) => {
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
+  const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
   const calcularMetricasGerencia = () => {
     let cuentasPorCobrar = 0; let totalFiltrado = 0; const conteoEmpresas = {};
@@ -171,7 +172,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
   const calcularMetricasGC = () => {
     const verifProyectos = proyectos.filter(p => !isProyectoApp(p));
     const estadosCont = {}; const seguimientoCont = { "Primera inspección": 0, "Reinspección": 0 };
-    let alertasVBA = 0; const informesPendientes = [];
+    let alertasVBA = 0; const informesPendientes = []; const alertasSLA = [];
     const estadosFlujoCalidad = ["Adjudicado y pagado", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador"];
 
     verifProyectos.forEach(p => {
@@ -180,11 +181,22 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
       if (p.datos_dinamicos?.seguimiento_inspeccion) seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
       if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) alertasVBA += 1;
       if (estadosFlujoCalidad.includes(estadoSeguro)) informesPendientes.push({ id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro });
+
+      // LÓGICA DE ALERTAS SLA (Tiempos de entrega críticos)
+      if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
+        const logCambio = [...(p.bitacora || [])].reverse().find(log => log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
+        let dias = 0;
+        if (logCambio && logCambio.id) {
+          dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24)); // Matemática de días transcurridos
+        }
+        if (estadoSeguro === "Elaboración de informe" && dias > 10) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
+        else if (estadoSeguro === "En revisión del Verificador" && dias > 2) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
+      }
     });
 
     const estadosData = Object.keys(estadosCont).map(key => ({ name: key, value: estadosCont[key] })).filter(d => d.value > 0).sort((a, b) => a.value - b.value);
     const segData = Object.keys(seguimientoCont).map((key, index) => ({ id: index, label: key, value: seguimientoCont[key], color: key === 'Reinspección' ? '#f43f5e' : '#0ea5e9' })).filter(d => d.value > 0);
-    return { estadosData, segData, informesPendientes, alertasVBA };
+    return { estadosData, segData, informesPendientes, alertasVBA, alertasSLA };
   };
 
   const mGerencia = calcularMetricasGerencia();
@@ -250,6 +262,19 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
 
       {vistaDashboard === 'GC' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {mGC.alertasSLA.length > 0 && (
+            <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px', mb: 1 }}>
+              <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">SLA Vencido (Atención Inmediata)</Typography></Box>
+                <Typography variant="body2" color="#e11d48" mb={1}>Verificaciones que han superado el tiempo máximo operativo permitido:</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {mGC.alertasSLA.map((inf, idx) => (
+                    <Chip key={idx} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador || 'Sin ID'} - ${inf.cliente || 'Desconocido'} (${inf.dias} días en ${inf.estado})`} size="small" variant="filled" color="error" sx={{ fontWeight: 'bold', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          )}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             {mGC.alertasVBA > 0 && (
               <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', height: '100%' }}>
@@ -284,49 +309,55 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
         </Box>
       )}
 
-      {vistaDashboard === 'Operativo' && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 3 }}>
-          <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <AssignmentIcon sx={{ color: '#0ea5e9', mr: 1 }} />
-              <Typography variant="h6" fontWeight="bold" color="#1e293b">Mis Próximas Inspecciones y Tareas</Typography>
-            </Box>
-
-            {misTareas.length === 0 ? (
-              <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                <CheckCircleIcon sx={{ fontSize: 40, color: '#10b981', mb: 1 }} />
-                <Typography variant="body1" color="textSecondary">No tienes tareas pendientes asignadas.</Typography>
-                <Typography variant="body2" color="textSecondary">¡Buen trabajo! Estás al día.</Typography>
+      {vistaDashboard === 'Operativo' && (() => {
+        const tareasMostrar = filtroUsuarioTareas === 'Todas' ? todasLasTareas : todasLasTareas.filter(t => t.asignado_a === filtroUsuarioTareas);
+        return (
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 3 }}>
+            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <AssignmentIcon sx={{ color: '#0ea5e9', mr: 1 }} />
+                  <Typography variant="h6" fontWeight="bold" color="#1e293b">Inspecciones y Tareas Activas</Typography>
+                </Box>
+                <TextField select size="small" value={filtroUsuarioTareas} onChange={(e) => setFiltroUsuarioTareas(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', '& .MuiInputBase-root': { fontSize: '0.875rem' } }}>
+                  <MenuItem value="Todas">🌍 Todas las tareas globales</MenuItem>
+                  {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo}>{miembro.nombre}</MenuItem>)}
+                </TextField>
               </Box>
-            ) : (
-              <List sx={{ pt: 0 }}>
-                {misTareas.map((tarea) => (
-                  <ListItem key={tarea.id} sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', mb: 2, backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' } }}>
-                    <ListItemText
-                      primary={<Typography variant="subtitle1" fontWeight="bold" color="#0ea5e9" sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => abrirFicha(proyectos.find(x => x.id === tarea.id_proyecto))}>{tarea.proyecto}</Typography>}
-                      secondaryTypographyProps={{ component: 'div' }}
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <Typography variant="body2" color="#334155" fontWeight="500">{tarea.descripcion}</Typography>
-                          <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
-                            Asignado por: {tarea.asignado_por} | Límite: {tarea.fecha_limite}
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                    <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', gap: 1 }}>
-                      {tarea.enlace_calendario && (
-                        <Button variant="outlined" size="small" color="info" onClick={() => window.open(tarea.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Ver Calendario</Button>
-                      )}
-                      <Button variant="contained" size="small" color="success" onClick={() => completarTarea(tarea.id)} sx={{ textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
-                    </Box>
-                  </ListItem>
-                ))}
-              </List>
-            )}
-          </Paper>
-        </Box>
-      )}
+
+              {tareasMostrar.length === 0 ? (
+                <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <CheckCircleIcon sx={{ fontSize: 40, color: '#10b981', mb: 1 }} />
+                  <Typography variant="body1" color="textSecondary">No hay tareas pendientes en este filtro.</Typography>
+                </Box>
+              ) : (
+                <List sx={{ pt: 0 }}>
+                  {tareasMostrar.map((tarea) => (
+                    <ListItem key={tarea.id} sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', mb: 2, backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' } }}>
+                      <ListItemText
+                        primary={<Typography variant="subtitle1" fontWeight="bold" color="#0ea5e9" sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => abrirFicha(proyectos.find(x => x.id === tarea.id_proyecto))}>{tarea.proyecto}</Typography>}
+                        secondaryTypographyProps={{ component: 'div' }}
+                        secondary={
+                          <Box sx={{ mt: 1 }}>
+                            <Typography variant="body2" color="#334155" fontWeight="500">{tarea.descripcion}</Typography>
+                            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
+                              <strong>Responsable:</strong> {tarea.asignado_a.split('@')[0]} | <strong>Asignado por:</strong> {tarea.asignado_por} | <strong>Límite:</strong> {tarea.fecha_limite}
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                      <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', gap: 1 }}>
+                        {tarea.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(tarea.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
+                        <Button variant="contained" size="small" color="success" onClick={() => completarTarea(tarea.id)} sx={{ textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
+                      </Box>
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Paper>
+          </Box>
+        );
+      })()}
     </Box>
   );
 };
@@ -344,7 +375,9 @@ function App() {
   const [session, setSession] = useState(null);
   const [authCargando, setAuthCargando] = useState(true);
   const [proyectos, setProyectos] = useState([]);
-  const [misTareas, setMisTareas] = useState([]);
+
+  // Novedad: Estado unificado para todas las tareas de la empresa
+  const [todasLasTareas, setTodasLasTareas] = useState([]);
   const [tareasProyecto, setTareasProyecto] = useState([]);
 
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -383,10 +416,10 @@ function App() {
   useEffect(() => {
     if (!session) return;
     cargarProyectos();
-    cargarMisTareas();
+    cargarTodasLasTareas(); // Actualizamos para que traiga el universo de tareas
     inicializarGoogleAPIs();
     inyectarSolucionZIndex();
-    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarMisTareas(); }, 10000);
+    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 10000);
     return () => clearInterval(intervaloRefresh);
   }, [session]);
 
@@ -458,9 +491,9 @@ function App() {
   // --- LLAMADAS A LA API ---
   const cargarProyectos = async () => { try { const respuesta = await axios.get(`${API_URL}/v1/proyectos`); setProyectos(respuesta.data); } catch (error) { console.error(error); } };
 
-  const cargarMisTareas = async () => {
+  const cargarTodasLasTareas = async () => {
     if (!session?.user?.email) return;
-    try { const res = await axios.get(`${API_URL}/v1/tareas/operativo/${session.user.email}`); setMisTareas(res.data); }
+    try { const res = await axios.get(`${API_URL}/v1/tareas/activas`); setTodasLasTareas(res.data); }
     catch (e) { console.error(e); }
   };
 
@@ -491,7 +524,7 @@ function App() {
   const handleCompletarTarea = async (id_tarea) => {
     try {
       await axios.put(`${API_URL}/v1/tareas/${id_tarea}/completar`);
-      cargarMisTareas();
+      cargarTodasLasTareas(); // Refrescamos todo
       if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
       cargarProyectos();
     } catch (e) { console.error(e); }
@@ -657,7 +690,7 @@ function App() {
       </AppBar>
 
       {tabActual === 2 ? (
-        <DashboardTab proyectos={proyectos} vistaDashboard={vistaDashboard} setVistaDashboard={setVistaDashboard} abrirFicha={abrirFicha} misTareas={misTareas} completarTarea={handleCompletarTarea} />
+        <DashboardTab proyectos={proyectos} vistaDashboard={vistaDashboard} setVistaDashboard={setVistaDashboard} abrirFicha={abrirFicha} todasLasTareas={todasLasTareas} completarTarea={handleCompletarTarea} usuarioActual={session?.user?.email} />
       ) : (
         <Box sx={{ flexGrow: 1, px: { xs: 2, md: 4, lg: 6 }, py: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
           <Paper elevation={1} sx={{ width: { xs: '100%', md: '220px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
