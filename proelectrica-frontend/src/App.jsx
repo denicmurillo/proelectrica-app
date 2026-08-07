@@ -117,7 +117,7 @@ const LoginScreen = ({ setSession }) => {
 };
 
 // --- DASHBOARD ESTRATÉGICO ---
-const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual }) => {
+const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual, abrirEdicionTarea }) => {
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
   const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
@@ -593,7 +593,7 @@ function App() {
     try {
       const datosDinamicosActualizados = {
         ...proyectoBase.datos_dinamicos, seguimiento_inspeccion: nuevosDatosGC.seguimiento, fecha_solicitud: nuevosDatosGC.fechaSolicitud, cancelacion_pago: nuevosDatosGC.cancelacionPago, moneda_presupuesto: nuevosDatosGC.monedaPresupuesto, moneda_cotizacion: nuevosDatosGC.monedaCotizacion, resultados_proyecto: nuevosDatosGC.resultadosProyecto, talento_requerido: nuevosDatosGC.talentoRequerido, otro_talento: nuevosDatosGC.otroTalento, colaboradores: nuevosDatosGC.colaboradores,
-        ubicacion: { ...proyectoBase.datos_dinamicos?.ubicacion, provincia: nuevosDatosGC.provincia, canton: nuevosDatosGC.canton, distrito: nuevosDatosGC.distrito, exacta: nuevosDatosGC.exacta },
+        ubicacion: { ...proyectoBase.datos_dinamicos?.ubicacion, provincia: nuevosDatosGC.provincia, canton: Math.random() < 0 ? nuevosDatosGC.canton : nuevosDatosGC.canton, distrito: nuevosDatosGC.distrito, exacta: nuevosDatosGC.exacta },
         detalles_tecnicos: { ...proyectoBase.datos_dinamicos?.detalles_tecnicos, actividad: nuevosDatosGC.actividad, cantidad_permisos: nuevosDatosGC.cantidad_permisos, area_m2: nuevosDatosGC.area_m2 },
         contacto: { ...proyectoBase.datos_dinamicos?.contacto, nombre: nuevosDatosGC.contactoNombre, telefono: nuevosDatosGC.contactoTelefono },
         propietario: { ...proyectoBase.datos_dinamicos?.propietario, nombre: nuevosDatosGC.propietarioNombre, cedula: nuevosDatosGC.propietarioCedula }
@@ -710,7 +710,7 @@ function App() {
       </AppBar>
 
       {tabActual === 2 ? (
-        <DashboardTab proyectos={proyectos} vistaDashboard={vistaDashboard} setVistaDashboard={setVistaDashboard} abrirFicha={abrirFicha} todasLasTareas={todasLasTareas} completarTarea={handleCompletarTarea} usuarioActual={session?.user?.email} />
+        <DashboardTab proyectos={proyectos} vistaDashboard={vistaDashboard} setVistaDashboard={setVistaDashboard} abrirFicha={abrirFicha} todasLasTareas={todasLasTareas} completarTarea={handleCompletarTarea} usuarioActual={session?.user?.email} abrirEdicionTarea={abrirEdicionTarea} />
       ) : (
         <Box sx={{ flexGrow: 1, px: { xs: 2, md: 4, lg: 6 }, py: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
           <Paper elevation={1} sx={{ width: { xs: '100%', md: '220px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
@@ -866,7 +866,16 @@ function App() {
                             secondaryTypographyProps={{ component: 'div' }}
                             secondary={<Typography component="div" variant="caption" color="textSecondary">{t.asignado_a.split('@')[0]} | {t.fecha_limite}</Typography>}
                           />
-                          {t.estado === 'Pendiente' && <Button size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5 }}><CheckCircleIcon fontSize="small" /></Button>}
+                          {t.estado === 'Pendiente' && (
+                            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                              <Tooltip title="Editar Tarea">
+                                <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(t)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
+                              </Tooltip>
+                              <Tooltip title="Marcar como Completada">
+                                <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5, px: 1, textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
+                              </Tooltip>
+                            </Box>
+                          )}
                         </ListItem>
                       ))}
                     </List>
@@ -878,7 +887,7 @@ function App() {
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
                   <List disablePadding>
                     {bitacora.map((comentario) => {
-                      const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como)/) || comentario.autor === 'Sistema';
+                      const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
                       return (
                         <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: esSistema ? 0.5 : 2 }}>
                           <ListItemAvatar sx={{ minWidth: '40px' }}><Avatar sx={{ width: 32, height: 32, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon fontSize="small" sx={{ color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
@@ -902,6 +911,7 @@ function App() {
           </>
         )}
       </Dialog>
+
       {/* MODAL DE EDICIÓN DE TAREAS */}
       <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b' }}>Editar Tarea</DialogTitle>
