@@ -117,6 +117,12 @@ class TareaCrear(BaseModel):
     correo_asignador: str
     fecha_limite: str
 
+class TareaActualizar(BaseModel):
+    descripcion: str
+    asignado_a: str
+    fecha_limite: str
+    modificado_por: str
+
 # =================================================================
 # 3. MOTOR DE GOOGLE CALENDAR
 # =================================================================
@@ -289,6 +295,44 @@ async def crear_tarea(id_proyecto: int, payload: TareaCrear, db: Session = Depen
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.put("/v1/tareas/{id_tarea}", status_code=200)
+async def editar_tarea(id_tarea: int, payload: TareaActualizar, db: Session = Depends(get_db)):
+    try:
+        tarea = db.query(TareaDB).filter(TareaDB.id == id_tarea).first()
+        if not tarea: raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+        # Detectar qué cambió exactamente para la auditoría
+        cambios = []
+        if tarea.descripcion != payload.descripcion:
+            cambios.append(f"Descripción (de '{tarea.descripcion}' a '{payload.descripcion}')")
+            tarea.descripcion = payload.descripcion
+        if tarea.asignado_a != payload.asignado_a:
+            cambios.append(f"Responsable (de '{tarea.asignado_a}' a '{payload.asignado_a}')")
+            tarea.asignado_a = payload.asignado_a
+        if tarea.fecha_limite != payload.fecha_limite:
+            cambios.append(f"Fecha (de '{tarea.fecha_limite}' a '{payload.fecha_limite}')")
+            tarea.fecha_limite = payload.fecha_limite
+
+        # Si hubo cambios, registramos en la bitácora del proyecto
+        if cambios:
+            proyecto = db.query(ProyectoDB).filter(ProyectoDB.id == tarea.id_proyecto).first()
+            if proyecto:
+                bitacora_actual = proyecto.bitacora if proyecto.bitacora else []
+                texto_cambios = ", ".join(cambios)
+                nuevo_log = {
+                    "id": int(time.time() * 1000),
+                    "autor": payload.modificado_por,
+                    "texto": f"Editó la tarea de inspección: Se modificó {texto_cambios}.",
+                    "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                }
+                proyecto.bitacora = bitacora_actual + [nuevo_log]
+
+        db.commit()
+        return {"status": "success"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/v1/proyectos/{id_proyecto}/tareas", status_code=200)
 async def listar_tareas_proyecto(id_proyecto: int, db: Session = Depends(get_db)):
     return db.query(TareaDB).filter(TareaDB.id_proyecto == id_proyecto).order_by(TareaDB.id.desc()).all()
@@ -310,7 +354,7 @@ async def listar_mis_tareas(correo: str, db: Session = Depends(get_db)):
             "enlace_calendario": t.enlace_calendario
         })
     return resultado
-    
+
 @app.get("/v1/tareas/activas", status_code=200)
 async def listar_todas_tareas_activas(db: Session = Depends(get_db)):
     """Este endpoint trae todas las tareas pendientes de toda la empresa"""

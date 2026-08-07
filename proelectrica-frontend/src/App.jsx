@@ -7,6 +7,7 @@ import {
   ListItemAvatar, Avatar, IconButton, Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup,
   Card, CardContent, CircularProgress, Autocomplete
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -348,6 +349,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
                       />
                       <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', gap: 1 }}>
                         {tarea.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(tarea.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
+                        <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(tarea)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
                         <Button variant="contained" size="small" color="success" onClick={() => completarTarea(tarea.id)} sx={{ textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
                       </Box>
                     </ListItem>
@@ -389,6 +391,8 @@ function App() {
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [datosNuevaTarea, setDatosNuevaTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
   const [creandoTarea, setCreandoTarea] = useState(false);
+  const [tareaEditando, setTareaEditando] = useState(null);
+  const [datosEdicionTarea, setDatosEdicionTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
 
   const [bitacora, setBitacora] = useState([]);
   const [archivos, setArchivos] = useState([]);
@@ -528,6 +532,22 @@ function App() {
       if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
       cargarProyectos();
     } catch (e) { console.error(e); }
+  };
+  const handleGuardarEdicionTarea = async () => {
+    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return alert("Completa todos los campos.");
+    try {
+      const payload = { ...datosEdicionTarea, modificado_por: session.user.email.split('@')[0] };
+      await axios.put(`${API_URL}/v1/tareas/${tareaEditando.id}`, payload);
+      setTareaEditando(null);
+      cargarTodasLasTareas();
+      if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
+      cargarProyectos();
+    } catch (e) { console.error("Error al editar tarea", e); }
+  };
+
+  const abrirEdicionTarea = (tarea) => {
+    setDatosEdicionTarea({ descripcion: tarea.descripcion, asignado_a: tarea.asignado_a, fecha_limite: tarea.fecha_limite });
+    setTareaEditando(tarea);
   };
 
   const formatFechaInput = (dateStr) => {
@@ -881,6 +901,21 @@ function App() {
             </DialogContent>
           </>
         )}
+      </Dialog>
+      {/* MODAL DE EDICIÓN DE TAREAS */}
+      <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b' }}>Editar Tarea</DialogTitle>
+        <DialogContent dividers>
+          <TextField fullWidth size="small" label="Descripción" value={datosEdicionTarea.descripcion} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, descripcion: e.target.value })} sx={{ mb: 2, mt: 1, ...comunInputSx }} />
+          <TextField select fullWidth size="small" label="Asignado a" value={datosEdicionTarea.asignado_a} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, asignado_a: e.target.value })} sx={{ mb: 2, ...comunInputSx }}>
+            {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo} sx={comunMenuSx}>{miembro.nombre}</MenuItem>)}
+          </TextField>
+          <TextField fullWidth type="date" size="small" label="Fecha Límite" InputLabelProps={{ shrink: true }} value={datosEdicionTarea.fecha_limite} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, fecha_limite: e.target.value })} sx={comunInputSx} />
+        </DialogContent>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          <Button onClick={() => setTareaEditando(null)} color="inherit" sx={{ textTransform: 'none' }}>Cancelar</Button>
+          <Button onClick={handleGuardarEdicionTarea} variant="contained" color="primary" sx={{ textTransform: 'none' }}>Guardar Cambios</Button>
+        </Box>
       </Dialog>
     </Box>
   );
