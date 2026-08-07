@@ -423,7 +423,7 @@ function App() {
     cargarTodasLasTareas(); // Actualizamos para que traiga el universo de tareas
     inicializarGoogleAPIs();
     inyectarSolucionZIndex();
-    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 10000);
+    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 300000);
     return () => clearInterval(intervaloRefresh);
   }, [session]);
 
