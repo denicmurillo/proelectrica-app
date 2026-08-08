@@ -26,6 +26,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 
@@ -188,7 +189,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
         const logCambio = [...(p.bitacora || [])].reverse().find(log => log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
         let dias = 0;
         if (logCambio && logCambio.id) {
-          dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24)); // Matemática de días transcurridos
+          dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
         }
         if (estadoSeguro === "Elaboración de informe" && dias > 10) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
         else if (estadoSeguro === "En revisión del Verificador" && dias > 2) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
@@ -378,11 +379,11 @@ function App() {
   const [authCargando, setAuthCargando] = useState(true);
   const [proyectos, setProyectos] = useState([]);
 
-  // Novedad: Estado unificado para todas las tareas de la empresa
   const [todasLasTareas, setTodasLasTareas] = useState([]);
   const [tareasProyecto, setTareasProyecto] = useState([]);
 
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [bitacoraExpandida, setBitacoraExpandida] = useState(false); // Modal Bitácora
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
   const [tabActual, setTabActual] = useState(1);
   const [filtroEstado, setFiltroEstado] = useState('Activos');
@@ -398,6 +399,7 @@ function App() {
   const [archivos, setArchivos] = useState([]);
 
   const chatEndRef = useRef(null);
+  const chatExpandedEndRef = useRef(null);
   const tokenClientRef = useRef(null);
   const [pickerCargado, setPickerCargado] = useState(false);
 
@@ -420,14 +422,17 @@ function App() {
   useEffect(() => {
     if (!session) return;
     cargarProyectos();
-    cargarTodasLasTareas(); // Actualizamos para que traiga el universo de tareas
+    cargarTodasLasTareas();
     inicializarGoogleAPIs();
     inyectarSolucionZIndex();
     const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 300000);
     return () => clearInterval(intervaloRefresh);
   }, [session]);
 
-  useEffect(() => { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" }); }, [bitacora, modalAbierto]);
+  useEffect(() => {
+    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (chatExpandedEndRef.current) chatExpandedEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [bitacora, modalAbierto, bitacoraExpandida]);
 
   const cerrarSesion = async () => { await supabase.auth.signOut(); };
 
@@ -528,7 +533,7 @@ function App() {
   const handleCompletarTarea = async (id_tarea) => {
     try {
       await axios.put(`${API_URL}/v1/tareas/${id_tarea}/completar`);
-      cargarTodasLasTareas(); // Refrescamos todo
+      cargarTodasLasTareas();
       if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
       cargarProyectos();
     } catch (e) { console.error(e); }
@@ -593,7 +598,7 @@ function App() {
     try {
       const datosDinamicosActualizados = {
         ...proyectoBase.datos_dinamicos, seguimiento_inspeccion: nuevosDatosGC.seguimiento, fecha_solicitud: nuevosDatosGC.fechaSolicitud, cancelacion_pago: nuevosDatosGC.cancelacionPago, moneda_presupuesto: nuevosDatosGC.monedaPresupuesto, moneda_cotizacion: nuevosDatosGC.monedaCotizacion, resultados_proyecto: nuevosDatosGC.resultadosProyecto, talento_requerido: nuevosDatosGC.talentoRequerido, otro_talento: nuevosDatosGC.otroTalento, colaboradores: nuevosDatosGC.colaboradores,
-        ubicacion: { ...proyectoBase.datos_dinamicos?.ubicacion, provincia: nuevosDatosGC.provincia, canton: Math.random() < 0 ? nuevosDatosGC.canton : nuevosDatosGC.canton, distrito: nuevosDatosGC.distrito, exacta: nuevosDatosGC.exacta },
+        ubicacion: { ...proyectoBase.datos_dinamicos?.ubicacion, provincia: nuevosDatosGC.provincia, canton: nuevosDatosGC.canton, distrito: nuevosDatosGC.distrito, exacta: nuevosDatosGC.exacta },
         detalles_tecnicos: { ...proyectoBase.datos_dinamicos?.detalles_tecnicos, actividad: nuevosDatosGC.actividad, cantidad_permisos: nuevosDatosGC.cantidad_permisos, area_m2: nuevosDatosGC.area_m2 },
         contacto: { ...proyectoBase.datos_dinamicos?.contacto, nombre: nuevosDatosGC.contactoNombre, telefono: nuevosDatosGC.contactoTelefono },
         propietario: { ...proyectoBase.datos_dinamicos?.propietario, nombre: nuevosDatosGC.propietarioNombre, cedula: nuevosDatosGC.propietarioCedula }
@@ -610,7 +615,13 @@ function App() {
     let progresoAjustado = datosGC.progreso;
     if (campo === 'estado' && ESTADOS_PROGRESO_BLOQUEADO.includes(valorNuevo)) progresoAjustado = 0;
 
-    const nombresLegibles = { tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Contacto (Email)", estado: "Estado (Status)", seguimiento: "Seguimiento", montoCotizado: "Monto Cotizado", pago: "Estado de Pago", cancelacionPago: "Cancelación del pago", inspector: "Administrador / Inspector", colaboradores: "Colaboradores", fechaProgramacion: "Fecha de Programación", fechaInicio: "Fecha de Inicio", fechaFin: "Fecha Final", fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)", provincia: "Provincia", canton: "Cantón", distrito: "Distrito", exacta: "Dirección Exacta", actividad: "Actividad", cantidad_permisos: "Cantidad de Permisos", area_m2: "Área (m²)", contactoNombre: "Nombre Contacto", contactoTelefono: "Teléfono Contacto", propietarioNombre: "Nombre Propietario", propietarioCedula: "Cédula Propietario", presupuestoGastos: "Presupuesto de Gastos", monedaPresupuesto: "Moneda de Presupuesto", monedaCotizacion: "Moneda de Cotización", resultadosProyecto: "Resultados del Proyecto", talentoRequerido: "Talento Requerido", otroTalento: "Otro Talento", saludProyecto: "Salud del Proyecto" };
+    const esProy = proyectoSeleccionado && isProyectoApp(proyectoSeleccionado);
+    const nombresLegibles = {
+      tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Contacto (Email)", estado: "Estado (Status)", seguimiento: "Seguimiento", montoCotizado: "Monto Cotizado", pago: "Estado de Pago", cancelacionPago: "Cancelación del pago", inspector: "Administrador / Inspector", colaboradores: "Colaboradores",
+      fechaInicio: esProy ? "Fecha de Inicio" : "Fecha Inspección",
+      fechaFin: esProy ? "Fecha Final" : "Prevista Entrega",
+      fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)", provincia: "Provincia", canton: "Cantón", distrito: "Distrito", exacta: "Dirección Exacta", actividad: "Actividad", cantidad_permisos: "Cantidad de Permisos", area_m2: "Área (m²)", contactoNombre: "Nombre Contacto", contactoTelefono: "Teléfono Contacto", propietarioNombre: "Nombre Propietario", propietarioCedula: "Cédula Propietario", presupuestoGastos: "Presupuesto de Gastos", monedaPresupuesto: "Moneda de Presupuesto", monedaCotizacion: "Moneda de Cotización", resultadosProyecto: "Resultados del Proyecto", talentoRequerido: "Talento Requerido", otroTalento: "Otro Talento", saludProyecto: "Salud del Proyecto"
+    };
 
     let valorFormateado = valorNuevo === '' || valorNuevo === null ? 'Vacío' : valorNuevo;
     if (campo === 'progreso') valorFormateado = `${valorNuevo}%`;
@@ -760,7 +771,14 @@ function App() {
               <Table size="small">
                 <TableHead sx={{ backgroundColor: '#f8fafc' }}>
                   {tabActual === 0 ? (
-                    <TableRow><TableCell sx={{ ...tableHeadSx, width: '30%' }}>Cliente / Empresa</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>ID Documento</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell><TableCell sx={{ ...tableHeadSx, width: '15%' }}>Empresa Encargada</TableCell><TableCell sx={{ ...tableHeadSx, width: '15%' }}>Área (m²)</TableCell></TableRow>
+                    <TableRow>
+                      <TableCell sx={{ ...tableHeadSx, width: '25%' }}>Cliente / Empresa</TableCell>
+                      <TableCell sx={{ ...tableHeadSx, width: '15%' }}>ID Documento</TableCell>
+                      <TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell>
+                      <TableCell sx={{ ...tableHeadSx, width: '15%' }}>Empresa Encargada</TableCell>
+                      <TableCell sx={{ ...tableHeadSx, width: '10%' }}>Área (m²)</TableCell>
+                      <TableCell sx={{ ...tableHeadSx, width: '15%' }}>Prevista Entrega</TableCell>
+                    </TableRow>
                   ) : (
                     <TableRow><TableCell sx={{ ...tableHeadSx, width: '25%' }}>Título del Proyecto</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Cliente</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell><TableCell sx={{ ...tableHeadSx, width: '15%' }}>Progreso</TableCell><TableCell sx={{ ...tableHeadSx, width: '10%' }}>Pago</TableCell><TableCell sx={{ ...tableHeadSx, width: '10%' }}>Admin</TableCell></TableRow>
                   )}
@@ -770,7 +788,14 @@ function App() {
                     listaMostrarOrdenada.map((proyecto) => (
                       <TableRow key={proyecto.id} hover style={{ cursor: 'pointer' }} onClick={() => abrirFicha(proyecto)}>
                         {tabActual === 0 ? (
-                          <><TableCell sx={{ ...tableCellSx, fontWeight: 600, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell><TableCell sx={tableCellSx}>{proyecto.identificador_solicitud || 'Pendiente'}</TableCell><TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell><TableCell sx={tableCellSx}>{proyecto.empresa_encargada || 'UVIE Proeléctrica'}</TableCell><TableCell sx={{ ...tableCellSx, overflow: 'visible' }}>{proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '---'}</TableCell></>
+                          <>
+                            <TableCell sx={{ ...tableCellSx, fontWeight: 600, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
+                            <TableCell sx={tableCellSx}>{proyecto.identificador_solicitud || 'Pendiente'}</TableCell>
+                            <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
+                            <TableCell sx={tableCellSx}>{proyecto.empresa_encargada || 'UVIE Proeléctrica'}</TableCell>
+                            <TableCell sx={{ ...tableCellSx, overflow: 'visible' }}>{proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '---'}</TableCell>
+                            <TableCell sx={tableCellSx}>{proyecto.fecha_fin ? formatFechaInput(proyecto.fecha_fin) : '---'}</TableCell>
+                          </>
                         ) : (
                           <><TableCell sx={{ ...tableCellSx, fontWeight: 'bold', color: '#8b5cf6' }}>{proyecto.titulo_proyecto || 'Sin Título'}</TableCell><TableCell sx={{ ...tableCellSx, fontWeight: 500, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell><TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell><TableCell sx={tableCellSx}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ width: '100%', minWidth: '80px', bgcolor: '#e2e8f0', borderRadius: '4px', height: '6px' }}><Box sx={{ bgcolor: '#0ea5e9', height: '6px', borderRadius: '4px', width: `${proyecto.progreso || 0}%` }} /></Box><Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>{proyecto.progreso || 0}%</Typography></Box></TableCell><TableCell sx={tableCellSx}>{proyecto.pago || 'Pendiente'}</TableCell><TableCell sx={tableCellSx}>{proyecto.inspector || 'Sin asignar'}</TableCell></>
                         )}
@@ -784,7 +809,7 @@ function App() {
         </Box>
       )}
 
-      {/* MODAL */}
+      {/* MODAL PRINCIPAL */}
       <Dialog open={modalAbierto} onClose={cerrarFicha} maxWidth="xl" fullWidth sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}>
         {proyectoSeleccionado && (
           <>
@@ -833,13 +858,14 @@ function App() {
                         sx={{ width: '100%' }}
                       />
                     </FilaEditable>
-                    <FilaEditable etiqueta="Fechas (Inicio - Fin)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></> : <><FilaEditable etiqueta="Cancelación del pago"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{OPCIONES_SINO.map(opt => (<Chip key={opt} label={opt} onClick={() => verificarYGuardarCampo('cancelacionPago', opt)} color={datosGC.cancelacionPago === opt ? "primary" : "default"} variant={datosGC.cancelacionPago === opt ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.cancelacionPago === opt ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Seguimiento"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{SEGUIMIENTO_VERIFICACION.map(seg => (<Chip key={seg} label={seg} onClick={() => verificarYGuardarCampo('seguimiento', seg)} color={datosGC.seguimiento === seg ? "primary" : "default"} variant={datosGC.seguimiento === seg ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.seguimiento === seg ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Inspector Asignado"><TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)} sx={comunInputSx}><MenuItem value="" sx={comunMenuSx}><em>Sin Asignar</em></MenuItem>{inspectorOpciones.map(nombre => <MenuItem key={nombre} value={nombre} sx={comunMenuSx}>{nombre}</MenuItem>)}</TextField></FilaEditable><FilaEditable etiqueta="Fecha Programación"><TextField fullWidth type="date" size="small" name="fechaProgramacion" value={datosGC.fechaProgramacion} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaProgramacion', e.target.value)} sx={comunInputSx} /></FilaEditable></>}
+                    <FilaEditable etiqueta="Fechas (Inicio - Fin)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></> : <><FilaEditable etiqueta="Cancelación del pago"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{OPCIONES_SINO.map(opt => (<Chip key={opt} label={opt} onClick={() => verificarYGuardarCampo('cancelacionPago', opt)} color={datosGC.cancelacionPago === opt ? "primary" : "default"} variant={datosGC.cancelacionPago === opt ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.cancelacionPago === opt ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Seguimiento"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{SEGUIMIENTO_VERIFICACION.map(seg => (<Chip key={seg} label={seg} onClick={() => verificarYGuardarCampo('seguimiento', seg)} color={datosGC.seguimiento === seg ? "primary" : "default"} variant={datosGC.seguimiento === seg ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.seguimiento === seg ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Inspector Asignado"><TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)} sx={comunInputSx}><MenuItem value="" sx={comunMenuSx}><em>Sin Asignar</em></MenuItem>{inspectorOpciones.map(nombre => <MenuItem key={nombre} value={nombre} sx={comunMenuSx}>{nombre}</MenuItem>)}</TextField></FilaEditable>
+                    <FilaEditable etiqueta="Fechas (Insp. - Entrega)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></>}
                   <FilaEditable etiqueta="Archivos (Drive)"><Box sx={{ width: '100%' }}>{archivos.map((archivo, i) => (<Box key={i} sx={{ display: 'flex', alignItems: 'center', p: 1, border: '1px solid #e2e8f0', borderRadius: '4px', mb: 1 }}><InsertDriveFileIcon color="primary" sx={{ mr: 1 }} /><Typography variant="body2" sx={{ flexGrow: 1, cursor: 'pointer', textDecoration: 'underline', color: '#0ea5e9' }} onClick={() => window.open(archivo.url, '_blank')}>{archivo.nombre}</Typography><IconButton size="small" color="error" onClick={() => eliminarArchivo(i, archivo.nombre)}><DeleteIcon fontSize="small" /></IconButton></Box>))}<Button variant="outlined" onClick={abrirGoogleDrivePicker} startIcon={<AttachFileIcon />} sx={{ textTransform: 'none', borderRadius: '20px', mt: 1, color: '#00838f', borderColor: '#00838f' }}>Adjuntar desde Google Drive</Button></Box></FilaEditable>
                 </Box></Box>
               </Box>
 
               {/* COLUMNA DERECHA: TAREAS Y BITÁCORA */}
-              <Box sx={{ width: '380px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+              <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
 
                 {/* SECCIÓN DE TAREAS */}
                 <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9' }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tareas del Proyecto</Typography></Box>
@@ -883,7 +909,14 @@ function App() {
                 )}
 
                 {/* SECCIÓN DE BITÁCORA */}
-                <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9' }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bitácora y Actividad</Typography></Box>
+                <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bitácora y Actividad</Typography>
+                  <Tooltip title="Expandir Bitácora">
+                    <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#8b5cf6' }}>
+                      <OpenInFullIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
                   <List disablePadding>
                     {bitacora.map((comentario) => {
@@ -926,6 +959,32 @@ function App() {
           <Button onClick={() => setTareaEditando(null)} color="inherit" sx={{ textTransform: 'none' }}>Cancelar</Button>
           <Button onClick={handleGuardarEdicionTarea} variant="contained" color="primary" sx={{ textTransform: 'none' }}>Guardar Cambios</Button>
         </Box>
+      </Dialog>
+
+      {/* MODAL DE BITÁCORA EXPANDIDA */}
+      <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
+        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8b5cf6' }}>Bitácora Completa del Expediente</Typography>
+          <IconButton onClick={() => setBitacoraExpandida(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 3, backgroundColor: '#f1f5f9' }}>
+          <List disablePadding>
+            {bitacora.map((comentario) => {
+              const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
+              return (
+                <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 2 }}>
+                  <ListItemAvatar sx={{ minWidth: '50px' }}><Avatar sx={{ width: 40, height: 40, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
+                  <ListItemText
+                    primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.5 }}><Typography variant="subtitle2" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary">{comentario.fecha}</Typography></Box>}
+                    secondaryTypographyProps={{ component: 'div' }}
+                    secondary={<Typography component="div" variant="body1" sx={{ mt: 0.5, color: esSistema ? '#6b7280' : '#1e293b', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', p: esSistema ? 0 : 2, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '8px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{comentario.texto}</Typography>}
+                  />
+                </ListItem>
+              );
+            })}
+            <div ref={chatExpandedEndRef} />
+          </List>
+        </DialogContent>
       </Dialog>
     </Box>
   );
