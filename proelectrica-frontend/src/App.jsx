@@ -1,11 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
   Dialog, DialogTitle, DialogContent, Box, Button, Divider, TextField, MenuItem, List, ListItem, ListItemText,
   ListItemAvatar, Avatar, IconButton, Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup,
-  Card, CardContent, CircularProgress, Autocomplete
+  Card, CardContent, CircularProgress, Autocomplete, Snackbar, Alert
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
@@ -122,7 +122,8 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
   const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
-  const calcularMetricasGerencia = () => {
+  // OPTIMIZACIÓN DE RENDIMIENTO: Memoización de métricas
+  const mGerencia = useMemo(() => {
     let cuentasPorCobrar = 0; let totalFiltrado = 0; const conteoEmpresas = {};
     proyectos.forEach(p => {
       const monto = safeParseMonto(p.monto_cotizado);
@@ -137,9 +138,9 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
     });
     const pieData = Object.keys(conteoEmpresas).map((key, index) => ({ id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length] })).filter(d => d.value > 0);
     return { cuentasPorCobrar, pieData, total: totalFiltrado };
-  };
+  }, [proyectos, empresaFiltroGerencia]);
 
-  const calcularMetricasPMO = () => {
+  const mPMO = useMemo(() => {
     const pmoProyectos = proyectos.filter(p => isProyectoApp(p) && !(p.estado || '').includes('archivado'));
     const saludCont = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
     const talentoCont = {}; const proyectosCercaVencimiento = []; const proyectosEnRiesgo = [];
@@ -169,9 +170,9 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
     const saludData = Object.keys(saludCont).map((key, index) => ({ id: index, label: key, value: saludCont[key], color: key === 'Saludable' ? '#10b981' : key === 'Necesita atención' ? '#f59e0b' : '#f43f5e' })).filter(d => d.value > 0);
     const talentoData = Object.keys(talentoCont).map(key => ({ name: key, value: talentoCont[key] })).filter(d => d.value > 0).sort((a, b) => b.value - a.value).slice(0, 5);
     return { saludData, talentoData, proyectosCercaVencimiento, proyectosEnRiesgo, totalActivos: pmoProyectos.length };
-  };
+  }, [proyectos]);
 
-  const calcularMetricasGC = () => {
+  const mGC = useMemo(() => {
     const verifProyectos = proyectos.filter(p => !isProyectoApp(p));
     const estadosCont = {}; const seguimientoCont = { "Primera inspección": 0, "Reinspección": 0 };
     let alertasVBA = 0; const informesPendientes = []; const alertasSLA = [];
@@ -199,11 +200,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
     const estadosData = Object.keys(estadosCont).map(key => ({ name: key, value: estadosCont[key] })).filter(d => d.value > 0).sort((a, b) => a.value - b.value);
     const segData = Object.keys(seguimientoCont).map((key, index) => ({ id: index, label: key, value: seguimientoCont[key], color: key === 'Reinspección' ? '#f43f5e' : '#0ea5e9' })).filter(d => d.value > 0);
     return { estadosData, segData, informesPendientes, alertasVBA, alertasSLA };
-  };
-
-  const mGerencia = calcularMetricasGerencia();
-  const mPMO = calcularMetricasPMO();
-  const mGC = calcularMetricasGC();
+  }, [proyectos]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, flexGrow: 1 }}>
@@ -243,7 +240,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
             <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
               <CardContent sx={{ py: '16px !important' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta de Riesgo en Proyectos</Typography></Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosEnRiesgo.map((p, idx) => (<Chip key={idx} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosEnRiesgo.map((p) => (<Chip key={p.id} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
               </CardContent>
             </Card>
           )}
@@ -251,7 +248,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
             <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px' }}>
               <CardContent sx={{ py: '16px !important' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">Proyectos Cerca del Límite de Entrega</Typography></Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosCercaVencimiento.map((p, idx) => (<Chip key={idx} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosCercaVencimiento.map((p) => (<Chip key={p.id} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
               </CardContent>
             </Card>
           )}
@@ -270,8 +267,8 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">SLA Vencido (Atención Inmediata)</Typography></Box>
                 <Typography variant="body2" color="#e11d48" mb={1}>Verificaciones que han superado el tiempo máximo operativo permitido:</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {mGC.alertasSLA.map((inf, idx) => (
-                    <Chip key={idx} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador || 'Sin ID'} - ${inf.cliente || 'Desconocido'} (${inf.dias} días en ${inf.estado})`} size="small" variant="filled" color="error" sx={{ fontWeight: 'bold', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />
+                  {mGC.alertasSLA.map((inf) => (
+                    <Chip key={inf.id} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador || 'Sin ID'} - ${inf.cliente || 'Desconocido'} (${inf.dias} días en ${inf.estado})`} size="small" variant="filled" color="error" sx={{ fontWeight: 'bold', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />
                   ))}
                 </Box>
               </CardContent>
@@ -291,7 +288,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
                 <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EditDocumentIcon sx={{ color: '#15803d' }} /><Typography variant="subtitle1" fontWeight="bold" color="#15803d">Flujo de Evaluación (ISO 17020)</Typography></Box>
                   <Typography variant="body2" color="#15803d" mb={1}>Verificaciones en proceso operativo y elaboración de informes:</Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{mGC.informesPendientes.map((inf, idx) => (<Chip key={idx} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { backgroundColor: '#dcfce7' } }} />))}</Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{mGC.informesPendientes.map((inf) => (<Chip key={inf.id} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { backgroundColor: '#dcfce7' } }} />))}</Box>
                 </CardContent>
               </Card>
             )}
@@ -382,10 +379,15 @@ function App() {
   const [todasLasTareas, setTodasLasTareas] = useState([]);
   const [tareasProyecto, setTareasProyecto] = useState([]);
 
+  // ESTADO GLOBAL PARA NOTIFICACIONES
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const mostrarMensaje = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
+
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [estadoGuardado, setEstadoGuardado] = useState(''); // Feedback Visual de Autoguardado
 
   // Novedad: Control de Pestañas y Modales
-  const [tabDerecha, setTabDerecha] = useState(0); // 0 = Bitácora, 1 = Tareas
+  const [tabDerecha, setTabDerecha] = useState(0);
   const [bitacoraExpandida, setBitacoraExpandida] = useState(false);
   const [tareasExpandidas, setTareasExpandidas] = useState(false);
 
@@ -463,7 +465,7 @@ function App() {
   };
 
   const abrirGoogleDrivePicker = () => {
-    if (!pickerCargado || !tokenClientRef.current) { alert("Conectando con Google..."); return; }
+    if (!pickerCargado || !tokenClientRef.current) return mostrarMensaje("Conectando con Google... intenta de nuevo en unos segundos.", "info");
     const tokenGuardado = sessionStorage.getItem('googlePickerToken');
     if (tokenGuardado) crearYMostrarPicker(tokenGuardado); else tokenClientRef.current.requestAccessToken();
   };
@@ -492,11 +494,11 @@ function App() {
     }
   };
 
-  const eliminarArchivo = (indexAEliminar, nombreArchivo) => {
-    const nuevosArchivos = archivos.filter((_, index) => index !== indexAEliminar);
+  const eliminarArchivo = (archivoAEliminar) => {
+    const nuevosArchivos = archivos.filter(a => a.url !== archivoAEliminar.url);
     setArchivos(nuevosArchivos);
     const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
-    const nuevoLog = { id: Date.now(), autor: nombreUsuario, texto: `Eliminó el archivo adjunto: "${nombreArchivo}"`, fecha: new Date().toLocaleString() };
+    const nuevoLog = { id: Date.now(), autor: nombreUsuario, texto: `Eliminó el archivo adjunto: "${archivoAEliminar.nombre}"`, fecha: new Date().toLocaleString() };
     const nuevaBitacora = [...bitacora, nuevoLog];
     setBitacora(nuevaBitacora);
     autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
@@ -517,7 +519,7 @@ function App() {
   };
 
   const handleCrearTarea = async () => {
-    if (!datosNuevaTarea.descripcion || !datosNuevaTarea.asignado_a || !datosNuevaTarea.fecha_limite) return alert("Por favor, completa todos los campos de la tarea.");
+    if (!datosNuevaTarea.descripcion || !datosNuevaTarea.asignado_a || !datosNuevaTarea.fecha_limite) return mostrarMensaje("Por favor, completa todos los campos de la tarea.", "warning");
     setCreandoTarea(true);
     try {
       const payload = {
@@ -531,7 +533,8 @@ function App() {
       setDatosNuevaTarea({ descripcion: '', asignado_a: '', fecha_limite: '' });
       cargarTareasProyecto(proyectoSeleccionado.id);
       cargarProyectos();
-    } catch (e) { console.error("Error al crear tarea", e); alert("Hubo un error al crear la tarea."); }
+      mostrarMensaje("Tarea asignada y notificada correctamente.");
+    } catch (e) { mostrarMensaje("Hubo un error al crear la tarea.", "error"); }
     setCreandoTarea(false);
   };
 
@@ -541,11 +544,12 @@ function App() {
       cargarTodasLasTareas();
       if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
       cargarProyectos();
-    } catch (e) { console.error(e); }
+      mostrarMensaje("Tarea marcada como completada.");
+    } catch (e) { mostrarMensaje("Error al completar la tarea.", "error"); }
   };
 
   const handleGuardarEdicionTarea = async () => {
-    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return alert("Completa todos los campos.");
+    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return mostrarMensaje("Completa todos los campos para editar la tarea.", "warning");
     try {
       const payload = { ...datosEdicionTarea, modificado_por: session.user.email.split('@')[0] };
       await axios.put(`${API_URL}/v1/tareas/${tareaEditando.id}`, payload);
@@ -553,7 +557,8 @@ function App() {
       cargarTodasLasTareas();
       if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
       cargarProyectos();
-    } catch (e) { console.error("Error al editar tarea", e); }
+      mostrarMensaje("Tarea editada correctamente.");
+    } catch (e) { mostrarMensaje("Error al editar tarea.", "error"); }
   };
 
   const abrirEdicionTarea = (tarea) => {
@@ -581,8 +586,6 @@ function App() {
     if (!proyecto) return;
     setProyectoSeleccionado(proyecto);
     cargarTareasProyecto(proyecto.id);
-
-    // Al abrir un expediente, mostramos Bitácora por defecto
     setTabDerecha(0);
 
     let colabArray = [];
@@ -604,6 +607,7 @@ function App() {
   const cerrarFicha = () => { setModalAbierto(false); setProyectoSeleccionado(null); };
 
   const autoguardarEnBackend = async (nuevosDatosGC, nuevaBitacora, nuevosArchivos, proyectoBase) => {
+    setEstadoGuardado('Guardando...');
     try {
       const datosDinamicosActualizados = {
         ...proyectoBase.datos_dinamicos, seguimiento_inspeccion: nuevosDatosGC.seguimiento, fecha_solicitud: nuevosDatosGC.fechaSolicitud, cancelacion_pago: nuevosDatosGC.cancelacionPago, moneda_presupuesto: nuevosDatosGC.monedaPresupuesto, moneda_cotizacion: nuevosDatosGC.monedaCotizacion, resultados_proyecto: nuevosDatosGC.resultadosProyecto, talento_requerido: nuevosDatosGC.talentoRequerido, otro_talento: nuevosDatosGC.otroTalento, colaboradores: nuevosDatosGC.colaboradores,
@@ -616,7 +620,12 @@ function App() {
         titulo_proyecto: nuevosDatosGC.tituloProyecto, empresa_encargada: nuevosDatosGC.empresaEncargada, empresa_solicitante: nuevosDatosGC.empresa_solicitante, correo_solicitante: nuevosDatosGC.correo_solicitante, estado: nuevosDatosGC.estado, seguimiento: nuevosDatosGC.seguimiento, monto_cotizado: nuevosDatosGC.montoCotizado, pago: nuevosDatosGC.pago, inspector: nuevosDatosGC.inspector, fecha_programacion: nuevosDatosGC.fechaProgramacion, fecha_inicio: nuevosDatosGC.fechaInicio, fecha_fin: nuevosDatosGC.fechaFin, progreso: nuevosDatosGC.progreso, presupuesto_gastos: nuevosDatosGC.presupuestoGastos, salud_proyecto: nuevosDatosGC.saludProyecto, bitacora: nuevaBitacora, archivos: nuevosArchivos, datos_dinamicos: datosDinamicosActualizados
       };
       await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
-    } catch (error) { console.error("Error en autoguardado:", error); }
+      setEstadoGuardado('Guardado');
+      setTimeout(() => setEstadoGuardado(''), 2000);
+    } catch (error) {
+      setEstadoGuardado('Error al guardar');
+      mostrarMensaje("Hubo un error de conexión al autoguardar.", "error");
+    }
   };
 
   const verificarYGuardarCampo = (campo, valorNuevo) => {
@@ -635,7 +644,6 @@ function App() {
     let valorFormateado = valorNuevo === '' || valorNuevo === null ? 'Vacío' : valorNuevo;
     if (campo === 'progreso') valorFormateado = `${valorNuevo}%`;
 
-    // PROTECCIÓN ROBUSTA PARA ARRAYS (Evita el cuelgue silencioso)
     if (campo === 'talentoRequerido' || campo === 'colaboradores') {
       valorFormateado = Array.isArray(valorNuevo) ? (valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno') : valorNuevo;
     }
@@ -667,7 +675,7 @@ function App() {
       setProyectos(respuestaLista.data);
       const nuevoProyecto = respuestaLista.data.find(p => p.id === res.data.id_proyecto);
       if (nuevoProyecto) { abrirFicha(nuevoProyecto); }
-    } catch (error) { console.error("Error creando proyecto:", error); }
+    } catch (error) { mostrarMensaje("Error creando proyecto.", "error"); }
   };
 
   if (authCargando) return <Box sx={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
@@ -823,7 +831,10 @@ function App() {
         {proyectoSeleccionado && (
           <>
             <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2, flexShrink: 0 }}>
-              <Box><Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography></Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
+                {estadoGuardado && <Typography variant="caption" color={estadoGuardado.includes('Error') ? 'error' : 'textSecondary'} sx={{ fontStyle: 'italic', fontWeight: 'bold' }}>{estadoGuardado}</Typography>}
+              </Box>
               <IconButton onClick={cerrarFicha}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
             </DialogTitle>
             <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
@@ -869,7 +880,7 @@ function App() {
                     </FilaEditable>
                     <FilaEditable etiqueta="Fechas (Inicio - Fin)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></> : <><FilaEditable etiqueta="Cancelación del pago"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{OPCIONES_SINO.map(opt => (<Chip key={opt} label={opt} onClick={() => verificarYGuardarCampo('cancelacionPago', opt)} color={datosGC.cancelacionPago === opt ? "primary" : "default"} variant={datosGC.cancelacionPago === opt ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.cancelacionPago === opt ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Seguimiento"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{SEGUIMIENTO_VERIFICACION.map(seg => (<Chip key={seg} label={seg} onClick={() => verificarYGuardarCampo('seguimiento', seg)} color={datosGC.seguimiento === seg ? "primary" : "default"} variant={datosGC.seguimiento === seg ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.seguimiento === seg ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Inspector Asignado"><TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)} sx={comunInputSx}><MenuItem value="" sx={comunMenuSx}><em>Sin Asignar</em></MenuItem>{inspectorOpciones.map(nombre => <MenuItem key={nombre} value={nombre} sx={comunMenuSx}>{nombre}</MenuItem>)}</TextField></FilaEditable>
                     <FilaEditable etiqueta="Fechas (Insp. - Entrega)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></>}
-                  <FilaEditable etiqueta="Archivos (Drive)"><Box sx={{ width: '100%' }}>{archivos.map((archivo, i) => (<Box key={i} sx={{ display: 'flex', alignItems: 'center', p: 1, border: '1px solid #e2e8f0', borderRadius: '4px', mb: 1 }}><InsertDriveFileIcon color="primary" sx={{ mr: 1 }} /><Typography variant="body2" sx={{ flexGrow: 1, cursor: 'pointer', textDecoration: 'underline', color: '#0ea5e9' }} onClick={() => window.open(archivo.url, '_blank')}>{archivo.nombre}</Typography><IconButton size="small" color="error" onClick={() => eliminarArchivo(i, archivo.nombre)}><DeleteIcon fontSize="small" /></IconButton></Box>))}<Button variant="outlined" onClick={abrirGoogleDrivePicker} startIcon={<AttachFileIcon />} sx={{ textTransform: 'none', borderRadius: '20px', mt: 1, color: '#00838f', borderColor: '#00838f' }}>Adjuntar desde Google Drive</Button></Box></FilaEditable>
+                  <FilaEditable etiqueta="Archivos (Drive)"><Box sx={{ width: '100%' }}>{archivos.map((archivo, i) => (<Box key={archivo.id || archivo.url || i} sx={{ display: 'flex', alignItems: 'center', p: 1, border: '1px solid #e2e8f0', borderRadius: '4px', mb: 1 }}><InsertDriveFileIcon color="primary" sx={{ mr: 1 }} /><Typography variant="body2" sx={{ flexGrow: 1, cursor: 'pointer', textDecoration: 'underline', color: '#0ea5e9' }} onClick={() => window.open(archivo.url, '_blank')}>{archivo.nombre}</Typography><IconButton size="small" color="error" onClick={() => eliminarArchivo(archivo)}><DeleteIcon fontSize="small" /></IconButton></Box>))}<Button variant="outlined" onClick={abrirGoogleDrivePicker} startIcon={<AttachFileIcon />} sx={{ textTransform: 'none', borderRadius: '20px', mt: 1, color: '#00838f', borderColor: '#00838f' }}>Adjuntar desde Google Drive</Button></Box></FilaEditable>
                 </Box></Box>
               </Box>
 
@@ -1076,6 +1087,13 @@ function App() {
           </Box>
         </DialogContent>
       </Dialog>
+
+      {/* SNACKBAR GLOBAL */}
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', fontWeight: 'bold' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
