@@ -122,7 +122,6 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
   const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
-  // OPTIMIZACIÓN DE RENDIMIENTO: Memoización de métricas
   const mGerencia = useMemo(() => {
     let cuentasPorCobrar = 0; let totalFiltrado = 0; const conteoEmpresas = {};
     proyectos.forEach(p => {
@@ -185,7 +184,6 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
       if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) alertasVBA += 1;
       if (estadosFlujoCalidad.includes(estadoSeguro)) informesPendientes.push({ id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro });
 
-      // LÓGICA DE ALERTAS SLA
       if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
         const logCambio = [...(p.bitacora || [])].reverse().find(log => log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
         let dias = 0;
@@ -379,14 +377,12 @@ function App() {
   const [todasLasTareas, setTodasLasTareas] = useState([]);
   const [tareasProyecto, setTareasProyecto] = useState([]);
 
-  // ESTADO GLOBAL PARA NOTIFICACIONES
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const mostrarMensaje = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
 
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [estadoGuardado, setEstadoGuardado] = useState(''); // Feedback Visual de Autoguardado
+  const [estadoGuardado, setEstadoGuardado] = useState('');
 
-  // Novedad: Control de Pestañas y Modales
   const [tabDerecha, setTabDerecha] = useState(0);
   const [bitacoraExpandida, setBitacoraExpandida] = useState(false);
   const [tareasExpandidas, setTareasExpandidas] = useState(false);
@@ -418,14 +414,12 @@ function App() {
   const estadoActualRef = useRef({ archivos, bitacora, datosGC, proyectoSeleccionado });
   useEffect(() => { estadoActualRef.current = { archivos, bitacora, datosGC, proyectoSeleccionado }; }, [archivos, bitacora, datosGC, proyectoSeleccionado]);
 
-  // Autenticación
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthCargando(false); });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); });
     return () => subscription.unsubscribe();
   }, []);
 
-  // Polling Datos
   useEffect(() => {
     if (!session) return;
     cargarProyectos();
@@ -504,7 +498,6 @@ function App() {
     autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
   };
 
-  // --- LLAMADAS A LA API ---
   const cargarProyectos = async () => { try { const respuesta = await axios.get(`${API_URL}/v1/proyectos`); setProyectos(respuesta.data); } catch (error) { console.error(error); } };
 
   const cargarTodasLasTareas = async () => {
@@ -830,7 +823,7 @@ function App() {
       <Dialog open={modalAbierto} onClose={cerrarFicha} maxWidth="xl" fullWidth sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}>
         {proyectoSeleccionado && (
           <>
-            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2, flexShrink: 0 }}>
+            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, flexShrink: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
                 {estadoGuardado && <Typography variant="caption" color={estadoGuardado.includes('Error') ? 'error' : 'textSecondary'} sx={{ fontStyle: 'italic', fontWeight: 'bold' }}>{estadoGuardado}</Typography>}
@@ -838,8 +831,8 @@ function App() {
               <IconButton onClick={cerrarFicha}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
             </DialogTitle>
             <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
-              <Box sx={{ flexGrow: 1, overflowY: 'auto', p: '2rem 3rem', backgroundColor: '#fff', minHeight: 0 }}>
-                <Box sx={{ mb: 4 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px' }}>Información del Cliente y Ubicación</Typography><Box sx={{ pl: 1 }}>
+              <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', px: '3rem', backgroundColor: '#fff', minHeight: 0 }}>
+                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px', mt: 1 }}>Información del Cliente y Ubicación</Typography><Box sx={{ pl: 1 }}>
                   {esVistaProyecto && <FilaEditable etiqueta="Título del Proyecto"><TextField fullWidth size="small" variant="standard" name="tituloProyecto" value={datosGC.tituloProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('tituloProyecto', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#8b5cf6', fontSize: '1rem' } }} /></FilaEditable>}
                   {esVistaProyecto ? <FilaEditable etiqueta="Empresa Encargada"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{EMPRESAS_ENCARGADAS.map(empresa => (<Chip key={empresa} label={empresa} onClick={() => verificarYGuardarCampo('empresaEncargada', empresa)} color={datosGC.empresaEncargada === empresa ? "primary" : "default"} variant={datosGC.empresaEncargada === empresa ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.empresaEncargada === empresa ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable> : <FilaDato etiqueta="Empresa Encargada" valor="UVIE Proeléctrica" colorValor="primary" />}
                   <FilaEditable etiqueta="Cliente / Solicitante"><TextField fullWidth size="small" variant="standard" name="empresa_solicitante" value={datosGC.empresa_solicitante} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('empresa_solicitante', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#0ea5e9', fontSize: '0.875rem' } }} /></FilaEditable>
@@ -849,7 +842,7 @@ function App() {
                   <FilaEditable etiqueta="Dirección Exacta"><TextField fullWidth size="small" name="exacta" value={datosGC.exacta} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('exacta', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
                 </Box></Box>
 
-                <Box sx={{ mb: 4 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px' }}>Detalles Técnicos</Typography><Box sx={{ pl: 1 }}>
+                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px' }}>Detalles Técnicos</Typography><Box sx={{ pl: 1 }}>
                   <FilaEditable etiqueta="Actividad"><TextField fullWidth size="small" name="actividad" value={datosGC.actividad} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('actividad', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
                   {!esVistaProyecto && <FilaEditable etiqueta="Permisos (Cantidad)"><TextField fullWidth size="small" name="cantidad_permisos" value={datosGC.cantidad_permisos} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('cantidad_permisos', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>}
                   <FilaEditable etiqueta="Área (m²)"><TextField fullWidth size="small" name="area_m2" value={datosGC.area_m2} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('area_m2', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
@@ -860,7 +853,7 @@ function App() {
                   {esVistaProyecto && <><FilaEditable etiqueta="Resultados del Proyecto"><TextField fullWidth multiline rows={4} size="small" name="resultadosProyecto" value={datosGC.resultadosProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('resultadosProyecto', e.target.value)} placeholder="Resultados esperados..." sx={comunInputSx} /></FilaEditable><FilaEditable etiqueta="Talento Requerido"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{TALENTO_OPCIONES.map(talento => { const isSelected = Array.isArray(datosGC.talentoRequerido) && datosGC.talentoRequerido.includes(talento); return (<Chip key={talento} label={talento} onClick={() => { const current = Array.isArray(datosGC.talentoRequerido) ? datosGC.talentoRequerido : []; const newValue = isSelected ? current.filter(t => t !== talento) : [...current, talento]; verificarYGuardarCampo('talentoRequerido', newValue); }} color={isSelected ? "primary" : "default"} variant={isSelected ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: isSelected ? 'bold' : 'normal', cursor: 'pointer' }} />); })}</Box></FilaEditable><FilaEditable etiqueta="Otro Talento Requerido"><TextField fullWidth size="small" name="otroTalento" value={datosGC.otroTalento} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('otroTalento', e.target.value)} placeholder="Subcontratos y otros" sx={comunInputSx} /></FilaEditable></>}
                 </Box></Box>
 
-                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', mb: 3, mt: 4, letterSpacing: '0.5px' }}>Gestión Operativa</Typography><Box sx={{ pl: 1 }}>
+                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, mt: 3, letterSpacing: '0.5px' }}>Gestión Operativa</Typography><Box sx={{ pl: 1 }}>
                   {!esVistaProyecto && <FilaEditable etiqueta="Fecha de Solicitud"><TextField fullWidth type="date" size="small" name="fechaSolicitud" value={datosGC.fechaSolicitud} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaSolicitud', e.target.value)} sx={comunInputSx} /></FilaEditable>}
                   <FilaEditable etiqueta="Status"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{(esVistaProyecto ? ESTADOS_PROYECTO : ESTADOS_VERIFICACION).map(est => (<Chip key={est} label={est} onClick={() => verificarYGuardarCampo('estado', est)} color={datosGC.estado === est ? "primary" : "default"} variant={datosGC.estado === est ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.estado === est ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable>
                   <FilaEditable etiqueta="Monto Cotizado"><Box sx={{ display: 'flex', gap: 1, width: '100%' }}><TextField select size="small" name="monedaCotizacion" value={datosGC.monedaCotizacion} onChange={(e) => verificarYGuardarCampo('monedaCotizacion', e.target.value)} sx={{ width: '100px', ...comunInputSx }}><MenuItem value="CRC" sx={comunMenuSx}>CRC</MenuItem><MenuItem value="USD" sx={comunMenuSx}>USD</MenuItem></TextField><TextField fullWidth size="small" name="montoCotizado" value={datosGC.montoCotizado} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('montoCotizado', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} placeholder="Monto total" sx={comunInputSx} /></Box></FilaEditable>
@@ -894,7 +887,7 @@ function App() {
                 {/* CONTENIDO PESTAÑA 1: TAREAS */}
                 {tabDerecha === 1 && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
-                    <Box sx={{ flexShrink: 0, p: 1.5, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestión de Tareas</Typography>
                       <Tooltip title="Expandir Tareas">
                         <IconButton size="small" onClick={() => setTareasExpandidas(true)} sx={{ color: '#0ea5e9', padding: 0.5 }}>
@@ -902,7 +895,7 @@ function App() {
                         </IconButton>
                       </Tooltip>
                     </Box>
-                    <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
+                    <Box sx={{ py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
                       <TextField fullWidth size="small" label="Describir tarea o inspección..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ mb: 1, ...comunInputSx }} />
                       <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                         <TextField select fullWidth size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={comunInputSx}>
@@ -921,7 +914,7 @@ function App() {
                       ) : (
                         <List disablePadding>
                           {tareasProyecto.map(t => (
-                            <ListItem key={t.id} sx={{ px: 0, py: 0.5, opacity: t.estado === 'Completada' ? 0.6 : 1 }}>
+                            <ListItem key={t.id} sx={{ px: 0, mb: 0.5, py: 0, opacity: t.estado === 'Completada' ? 0.6 : 1 }}>
                               <ListItemText
                                 primary={<Typography variant="body2" fontWeight="bold" sx={{ textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
                                 secondaryTypographyProps={{ component: 'div' }}
@@ -948,7 +941,7 @@ function App() {
                 {/* CONTENIDO PESTAÑA 0: BITÁCORA */}
                 {tabDerecha === 0 && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
-                    <Box sx={{ flexShrink: 0, p: 1.5, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial del Expediente</Typography>
                       <Tooltip title="Expandir Bitácora">
                         <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#8b5cf6', padding: 0.5 }}>
@@ -961,12 +954,12 @@ function App() {
                         {bitacora.map((comentario) => {
                           const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
                           return (
-                            <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 1 }}>
+                            <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 0.5, py: 0 }}>
                               <ListItemAvatar sx={{ minWidth: '36px' }}><Avatar sx={{ width: 28, height: 28, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ fontSize: 18, color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
                               <ListItemText
                                 primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{comentario.fecha}</Typography></Box>}
                                 secondaryTypographyProps={{ component: 'div' }}
-                                secondary={<Typography component="div" variant="body2" sx={{ mt: 0.25, color: esSistema ? '#6b7280' : '#111827', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', p: esSistema ? 0 : 1, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', wordBreak: 'break-word' }}>{comentario.texto}</Typography>}
+                                secondary={<Typography component="div" variant="body2" sx={{ mt: 0.25, color: esSistema ? '#6b7280' : '#111827', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', py: esSistema ? 0 : 0.5, px: esSistema ? 0 : 1, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', wordBreak: 'break-word' }}>{comentario.texto}</Typography>}
                               />
                             </ListItem>
                           );
@@ -988,15 +981,15 @@ function App() {
 
       {/* MODAL DE EDICIÓN DE TAREAS */}
       <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b' }}>Editar Tarea</DialogTitle>
-        <DialogContent dividers>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b', py: 1 }}>Editar Tarea</DialogTitle>
+        <DialogContent dividers sx={{ py: 1 }}>
           <TextField fullWidth size="small" label="Descripción" value={datosEdicionTarea.descripcion} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, descripcion: e.target.value })} sx={{ mb: 2, mt: 1, ...comunInputSx }} />
           <TextField select fullWidth size="small" label="Asignado a" value={datosEdicionTarea.asignado_a} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, asignado_a: e.target.value })} sx={{ mb: 2, ...comunInputSx }}>
             {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo} sx={comunMenuSx}>{miembro.nombre}</MenuItem>)}
           </TextField>
           <TextField fullWidth type="date" size="small" label="Fecha Límite" InputLabelProps={{ shrink: true }} value={datosEdicionTarea.fecha_limite} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, fecha_limite: e.target.value })} sx={comunInputSx} />
         </DialogContent>
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+        <Box sx={{ py: 1, px: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
           <Button onClick={() => setTareaEditando(null)} color="inherit" sx={{ textTransform: 'none' }}>Cancelar</Button>
           <Button onClick={handleGuardarEdicionTarea} variant="contained" color="primary" sx={{ textTransform: 'none' }}>Guardar Cambios</Button>
         </Box>
@@ -1004,21 +997,21 @@ function App() {
 
       {/* MODAL DE BITÁCORA EXPANDIDA */}
       <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
-        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8b5cf6' }}>Bitácora Completa del Expediente</Typography>
           <IconButton onClick={() => setBitacoraExpandida(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
         </DialogTitle>
-        <DialogContent sx={{ p: 3, backgroundColor: '#f1f5f9' }}>
+        <DialogContent sx={{ py: 1, px: 3, backgroundColor: '#f1f5f9' }}>
           <List disablePadding>
             {bitacora.map((comentario) => {
               const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
               return (
-                <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 2 }}>
+                <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 1, py: 0 }}>
                   <ListItemAvatar sx={{ minWidth: '50px' }}><Avatar sx={{ width: 40, height: 40, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
                   <ListItemText
                     primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.5 }}><Typography variant="subtitle2" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary">{comentario.fecha}</Typography></Box>}
                     secondaryTypographyProps={{ component: 'div' }}
-                    secondary={<Typography component="div" variant="body1" sx={{ mt: 0.5, color: esSistema ? '#6b7280' : '#1e293b', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', p: esSistema ? 0 : 2, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '8px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{comentario.texto}</Typography>}
+                    secondary={<Typography component="div" variant="body1" sx={{ mt: 0.5, color: esSistema ? '#6b7280' : '#1e293b', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', py: esSistema ? 0 : 1, px: esSistema ? 0 : 2, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '8px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{comentario.texto}</Typography>}
                   />
                 </ListItem>
               );
@@ -1030,13 +1023,13 @@ function App() {
 
       {/* MODAL DE TAREAS EXPANDIDAS */}
       <Dialog open={tareasExpandidas} onClose={() => setTareasExpandidas(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
-        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#0ea5e9' }}>Panel Completo de Tareas</Typography>
           <IconButton onClick={() => setTareasExpandidas(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
         </DialogTitle>
         <DialogContent sx={{ p: 0, backgroundColor: '#f1f5f9', display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ p: 3, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
-            <Typography variant="subtitle2" sx={{ color: '#64748b', mb: 2, fontWeight: 'bold' }}>NUEVA TAREA O INSPECCIÓN</Typography>
+          <Box sx={{ py: 1.5, px: 3, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
+            <Typography variant="subtitle2" sx={{ color: '#64748b', mb: 1, fontWeight: 'bold' }}>NUEVA TAREA O INSPECCIÓN</Typography>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <TextField fullWidth size="small" label="Descripción detallada..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ flexGrow: 1, minWidth: '250px' }} />
               <TextField select size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={{ minWidth: '200px' }}>
@@ -1048,7 +1041,7 @@ function App() {
               </Button>
             </Box>
           </Box>
-          <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 3 }}>
+          <Box sx={{ flexGrow: 1, overflowY: 'auto', py: 1, px: 3 }}>
             {tareasProyecto.length === 0 ? (
               <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#fff', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                 <AssignmentTurnedInIcon sx={{ fontSize: 40, color: '#94a3b8', mb: 1 }} />
@@ -1057,7 +1050,7 @@ function App() {
             ) : (
               <List disablePadding>
                 {tareasProyecto.map(t => (
-                  <ListItem key={t.id} sx={{ px: 2, py: 1.5, mb: 2, backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', opacity: t.estado === 'Completada' ? 0.7 : 1 }}>
+                  <ListItem key={t.id} sx={{ px: 2, py: 1, mb: 1, backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', opacity: t.estado === 'Completada' ? 0.7 : 1 }}>
                     <ListItemText
                       primary={<Typography variant="subtitle1" fontWeight="bold" sx={{ color: t.estado === 'Completada' ? '#64748b' : '#1e293b', textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
                       secondaryTypographyProps={{ component: 'div' }}
