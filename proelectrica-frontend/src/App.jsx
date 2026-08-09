@@ -184,7 +184,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
       if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) alertasVBA += 1;
       if (estadosFlujoCalidad.includes(estadoSeguro)) informesPendientes.push({ id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro });
 
-      // LÓGICA DE ALERTAS SLA (Tiempos de entrega críticos)
+      // LÓGICA DE ALERTAS SLA
       if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
         const logCambio = [...(p.bitacora || [])].reverse().find(log => log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
         let dias = 0;
@@ -383,7 +383,12 @@ function App() {
   const [tareasProyecto, setTareasProyecto] = useState([]);
 
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [bitacoraExpandida, setBitacoraExpandida] = useState(false); // Modal Bitácora
+
+  // Novedad: Control de Pestañas y Modales
+  const [tabDerecha, setTabDerecha] = useState(0); // 0 = Bitácora, 1 = Tareas
+  const [bitacoraExpandida, setBitacoraExpandida] = useState(false);
+  const [tareasExpandidas, setTareasExpandidas] = useState(false);
+
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
   const [tabActual, setTabActual] = useState(1);
   const [filtroEstado, setFiltroEstado] = useState('Activos');
@@ -430,9 +435,9 @@ function App() {
   }, [session]);
 
   useEffect(() => {
-    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (chatEndRef.current && tabDerecha === 0) chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     if (chatExpandedEndRef.current) chatExpandedEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [bitacora, modalAbierto, bitacoraExpandida]);
+  }, [bitacora, modalAbierto, bitacoraExpandida, tabDerecha]);
 
   const cerrarSesion = async () => { await supabase.auth.signOut(); };
 
@@ -538,6 +543,7 @@ function App() {
       cargarProyectos();
     } catch (e) { console.error(e); }
   };
+
   const handleGuardarEdicionTarea = async () => {
     if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return alert("Completa todos los campos.");
     try {
@@ -575,6 +581,9 @@ function App() {
     if (!proyecto) return;
     setProyectoSeleccionado(proyecto);
     cargarTareasProyecto(proyecto.id);
+
+    // Al abrir un expediente, mostramos Bitácora por defecto
+    setTabDerecha(0);
 
     let colabArray = [];
     if (Array.isArray(proyecto.datos_dinamicos?.colaboradores)) {
@@ -864,81 +873,102 @@ function App() {
                 </Box></Box>
               </Box>
 
-              {/* COLUMNA DERECHA: TAREAS Y BITÁCORA */}
+              {/* COLUMNA DERECHA: PESTAÑAS Y CONTENIDO (TAREAS Y BITÁCORA) */}
               <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                <Tabs value={tabDerecha} onChange={(e, val) => setTabDerecha(val)} variant="fullWidth" sx={{ minHeight: '48px', borderBottom: '1px solid #e2e8f0', bgcolor: '#fff' }}>
+                  <Tab label="Bitácora y Actividad" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 0 ? '#8b5cf6 !important' : 'text.secondary' }} />
+                  <Tab label="Tareas del Proyecto" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 1 ? '#0ea5e9 !important' : 'text.secondary' }} />
+                </Tabs>
 
-                {/* SECCIÓN DE TAREAS */}
-                <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9' }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tareas del Proyecto</Typography></Box>
-                <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
-                  <TextField fullWidth size="small" label="Describir tarea o inspección..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ mb: 1, ...comunInputSx }} />
-                  <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                    <TextField select fullWidth size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={comunInputSx}>
-                      {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo} sx={comunMenuSx}>{miembro.nombre}</MenuItem>)}
-                    </TextField>
-                    <TextField fullWidth type="date" size="small" value={datosNuevaTarea.fecha_limite} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, fecha_limite: e.target.value })} sx={comunInputSx} />
-                  </Box>
-                  <Button fullWidth variant="contained" size="small" onClick={handleCrearTarea} disabled={creandoTarea} sx={{ textTransform: 'none' }}>
-                    {creandoTarea ? 'Creando y Notificando...' : 'Asignar Tarea'}
-                  </Button>
-                </Box>
+                {/* CONTENIDO PESTAÑA 1: TAREAS */}
+                {tabDerecha === 1 && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
+                    <Box sx={{ flexShrink: 0, p: 1.5, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestión de Tareas</Typography>
+                      <Tooltip title="Expandir Tareas">
+                        <IconButton size="small" onClick={() => setTareasExpandidas(true)} sx={{ color: '#0ea5e9', padding: 0.5 }}>
+                          <OpenInFullIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                    <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
+                      <TextField fullWidth size="small" label="Describir tarea o inspección..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ mb: 1, ...comunInputSx }} />
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        <TextField select fullWidth size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={comunInputSx}>
+                          {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo} sx={comunMenuSx}>{miembro.nombre}</MenuItem>)}
+                        </TextField>
+                        <TextField fullWidth type="date" size="small" value={datosNuevaTarea.fecha_limite} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, fecha_limite: e.target.value })} sx={comunInputSx} />
+                      </Box>
+                      <Button fullWidth variant="contained" size="small" onClick={handleCrearTarea} disabled={creandoTarea} sx={{ textTransform: 'none' }}>
+                        {creandoTarea ? 'Creando y Notificando...' : 'Asignar Tarea'}
+                      </Button>
+                    </Box>
 
-                {tareasProyecto.length > 0 && (
-                  <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', maxHeight: '150px', overflowY: 'auto' }}>
-                    <List disablePadding>
-                      {tareasProyecto.map(t => (
-                        <ListItem key={t.id} sx={{ px: 0, py: 0.5, opacity: t.estado === 'Completada' ? 0.6 : 1 }}>
-                          <ListItemText
-                            primary={<Typography variant="body2" fontWeight="bold" sx={{ textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
-                            secondaryTypographyProps={{ component: 'div' }}
-                            secondary={<Typography component="div" variant="caption" color="textSecondary">{t.asignado_a.split('@')[0]} | {t.fecha_limite}</Typography>}
-                          />
-                          {t.estado === 'Pendiente' && (
-                            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                              <Tooltip title="Editar Tarea">
-                                <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(t)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
-                              </Tooltip>
-                              <Tooltip title="Marcar como Completada">
-                                <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5, px: 1, textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
-                              </Tooltip>
-                            </Box>
-                          )}
-                        </ListItem>
-                      ))}
-                    </List>
+                    <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
+                      {tareasProyecto.length === 0 ? (
+                        <Typography variant="body2" color="textSecondary" align="center" sx={{ mt: 2 }}>No hay tareas asignadas a este proyecto.</Typography>
+                      ) : (
+                        <List disablePadding>
+                          {tareasProyecto.map(t => (
+                            <ListItem key={t.id} sx={{ px: 0, py: 0.5, opacity: t.estado === 'Completada' ? 0.6 : 1 }}>
+                              <ListItemText
+                                primary={<Typography variant="body2" fontWeight="bold" sx={{ textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
+                                secondaryTypographyProps={{ component: 'div' }}
+                                secondary={<Typography component="div" variant="caption" color="textSecondary">{t.asignado_a.split('@')[0]} | {t.fecha_limite}</Typography>}
+                              />
+                              {t.estado === 'Pendiente' && (
+                                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                  <Tooltip title="Editar Tarea">
+                                    <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(t)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
+                                  </Tooltip>
+                                  <Tooltip title="Marcar como Completada">
+                                    <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5, px: 1, textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
+                                  </Tooltip>
+                                </Box>
+                              )}
+                            </ListItem>
+                          ))}
+                        </List>
+                      )}
+                    </Box>
                   </Box>
                 )}
 
-                {/* SECCIÓN DE BITÁCORA */}
-                <Box sx={{ flexShrink: 0, p: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bitácora y Actividad</Typography>
-                  <Tooltip title="Expandir Bitácora">
-                    <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#8b5cf6' }}>
-                      <OpenInFullIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
-                  <List disablePadding>
-                    {bitacora.map((comentario) => {
-                      const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
-                      return (
-                        <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: esSistema ? 0.5 : 2 }}>
-                          <ListItemAvatar sx={{ minWidth: '40px' }}><Avatar sx={{ width: 32, height: 32, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon fontSize="small" sx={{ color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
-                          <ListItemText
-                            primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{comentario.fecha}</Typography></Box>}
-                            secondaryTypographyProps={{ component: 'div' }}
-                            secondary={<Typography component="div" variant="body2" sx={{ mt: 0.5, color: esSistema ? '#6b7280' : '#111827', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', p: esSistema ? 0 : 1.5, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', wordBreak: 'break-word' }}>{comentario.texto}</Typography>}
-                          />
-                        </ListItem>
-                      );
-                    })}
-                    <div ref={chatEndRef} />
-                  </List>
-                </Box>
-                <Box sx={{ flexShrink: 0, p: 2, backgroundColor: '#fff', borderTop: '1px solid #e2e8f0' }}>
-                  <TextField fullWidth multiline maxRows={3} size="small" placeholder="Añade un comentario..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} sx={{ backgroundColor: '#fff', mb: 1, ...comunInputSx }} />
-                  <Button fullWidth variant="contained" endIcon={<SendIcon />} size="small" onClick={agregarComentario} sx={{ textTransform: 'none', borderRadius: '4px' }}>Comentar</Button>
-                </Box>
+                {/* CONTENIDO PESTAÑA 0: BITÁCORA */}
+                {tabDerecha === 0 && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
+                    <Box sx={{ flexShrink: 0, p: 1.5, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial del Expediente</Typography>
+                      <Tooltip title="Expandir Bitácora">
+                        <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#8b5cf6', padding: 0.5 }}>
+                          <OpenInFullIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                    <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
+                      <List disablePadding>
+                        {bitacora.map((comentario) => {
+                          const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
+                          return (
+                            <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 1 }}>
+                              <ListItemAvatar sx={{ minWidth: '36px' }}><Avatar sx={{ width: 28, height: 28, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ fontSize: 18, color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
+                              <ListItemText
+                                primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{comentario.fecha}</Typography></Box>}
+                                secondaryTypographyProps={{ component: 'div' }}
+                                secondary={<Typography component="div" variant="body2" sx={{ mt: 0.25, color: esSistema ? '#6b7280' : '#111827', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', p: esSistema ? 0 : 1, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', wordBreak: 'break-word' }}>{comentario.texto}</Typography>}
+                              />
+                            </ListItem>
+                          );
+                        })}
+                        <div ref={chatEndRef} />
+                      </List>
+                    </Box>
+                    <Box sx={{ flexShrink: 0, p: 2, backgroundColor: '#fff', borderTop: '1px solid #e2e8f0' }}>
+                      <TextField fullWidth multiline maxRows={3} size="small" placeholder="Añade un comentario..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} sx={{ backgroundColor: '#fff', mb: 1, ...comunInputSx }} />
+                      <Button fullWidth variant="contained" endIcon={<SendIcon />} size="small" onClick={agregarComentario} sx={{ textTransform: 'none', borderRadius: '4px' }}>Comentar</Button>
+                    </Box>
+                  </Box>
+                )}
               </Box>
             </DialogContent>
           </>
@@ -984,6 +1014,66 @@ function App() {
             })}
             <div ref={chatExpandedEndRef} />
           </List>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE TAREAS EXPANDIDAS */}
+      <Dialog open={tareasExpandidas} onClose={() => setTareasExpandidas(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
+        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#0ea5e9' }}>Panel Completo de Tareas</Typography>
+          <IconButton onClick={() => setTareasExpandidas(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, backgroundColor: '#f1f5f9', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ p: 3, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
+            <Typography variant="subtitle2" sx={{ color: '#64748b', mb: 2, fontWeight: 'bold' }}>NUEVA TAREA O INSPECCIÓN</Typography>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <TextField fullWidth size="small" label="Descripción detallada..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ flexGrow: 1, minWidth: '250px' }} />
+              <TextField select size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={{ minWidth: '200px' }}>
+                {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo}>{miembro.nombre}</MenuItem>)}
+              </TextField>
+              <TextField type="date" size="small" value={datosNuevaTarea.fecha_limite} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, fecha_limite: e.target.value })} sx={{ minWidth: '150px' }} />
+              <Button variant="contained" size="large" onClick={handleCrearTarea} disabled={creandoTarea} sx={{ textTransform: 'none', height: '40px', px: 4 }}>
+                {creandoTarea ? 'Guardando...' : 'Asignar Tarea'}
+              </Button>
+            </Box>
+          </Box>
+          <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 3 }}>
+            {tareasProyecto.length === 0 ? (
+              <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#fff', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                <AssignmentTurnedInIcon sx={{ fontSize: 40, color: '#94a3b8', mb: 1 }} />
+                <Typography variant="body1" color="textSecondary">No hay tareas pendientes ni completadas en este proyecto.</Typography>
+              </Box>
+            ) : (
+              <List disablePadding>
+                {tareasProyecto.map(t => (
+                  <ListItem key={t.id} sx={{ px: 2, py: 1.5, mb: 2, backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', opacity: t.estado === 'Completada' ? 0.7 : 1 }}>
+                    <ListItemText
+                      primary={<Typography variant="subtitle1" fontWeight="bold" sx={{ color: t.estado === 'Completada' ? '#64748b' : '#1e293b', textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
+                      secondaryTypographyProps={{ component: 'div' }}
+                      secondary={
+                        <Box sx={{ mt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                          <Chip icon={<PersonIcon />} label={`Responsable: ${t.asignado_a.split('@')[0]}`} size="small" variant="outlined" />
+                          <Chip icon={<EventBusyIcon />} label={`Límite: ${t.fecha_limite}`} size="small" variant="outlined" color={t.estado === 'Pendiente' ? 'warning' : 'default'} />
+                          <Chip label={`Asignado por: ${t.asignado_por}`} size="small" sx={{ bgcolor: '#f1f5f9' }} />
+                        </Box>
+                      }
+                    />
+                    {t.estado === 'Pendiente' && (
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 2 }}>
+                        {t.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(t.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
+                        <Tooltip title="Editar Tarea">
+                          <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(t)} sx={{ minWidth: 'auto', p: 1 }}><EditIcon fontSize="small" /></Button>
+                        </Tooltip>
+                        <Tooltip title="Marcar como Completada">
+                          <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ textTransform: 'none', fontWeight: 'bold', px: 2 }}>Completar</Button>
+                        </Tooltip>
+                      </Box>
+                    )}
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </Box>
         </DialogContent>
       </Dialog>
     </Box>

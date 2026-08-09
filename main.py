@@ -2,20 +2,32 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, JSON, BIGINT, Date, ForeignKey
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
+from sqlalchemy.orm.attributes import flag_modified
 from typing import List, Optional
 from datetime import datetime
 import time
 import os
+import logging
 
 # --- LIBRERÍAS DE GOOGLE CALENDAR ---
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 # =================================================================
+# 0. CONFIGURACIÓN DE LOGGING
+# =================================================================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("proelectrica")
+
+# =================================================================
 # 1. BASE DE DATOS Y MODELOS
 # =================================================================
+# Compatibilidad automática con Render PostgreSQL
 SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./proelectrica.db")
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -43,6 +55,9 @@ class ProyectoDB(Base):
     salud_proyecto = Column(String, default="Saludable")
     progreso = Column(Integer, default=0)
 
+    # Relación ORM
+    tareas = relationship("TareaDB", back_populates="proyecto", cascade="all, delete-orphan")
+
 class TareaDB(Base):
     __tablename__ = "tareas"
     id = Column(Integer, primary_key=True, index=True)
@@ -54,6 +69,9 @@ class TareaDB(Base):
     fecha_limite = Column(String, nullable=True) 
     enlace_calendario = Column(String, nullable=True)
     created_at = Column(String, default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    # Relación ORM
+    proyecto = relationship("ProyectoDB", back_populates="tareas")
 
 Base.metadata.create_all(bind=engine)
 
@@ -131,11 +149,10 @@ def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invit
     """Crea un evento asumiendo la identidad del usuario conectado (Todo el día, sin notificaciones)"""
     SCOPES = ['https://www.googleapis.com/auth/calendar.events']
     
-    # MAGIA ENTERPRISE: Buscador de rutas robusto para Render y Local
     rutas_posibles = [
-        '/etc/secrets/google-credentials.json',             # Bóveda estándar de Render
-        '/opt/render/project/src/google-credentials.json',  # Raíz de proyecto en Render
-        'google-credentials.json'                           # Entorno Local
+        '/etc/secrets/google-credentials.json',             
+        '/opt/render/project/src/google-credentials.json',  
+        'google-credentials.json'                           
     ]
     
     SERVICE_ACCOUNT_FILE = None
@@ -145,11 +162,10 @@ def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invit
             break
             
     if not SERVICE_ACCOUNT_FILE:
-        print("⚠️ ADVERTENCIA: No se encontró 'google-credentials.json' en los servidores de Render ni en Local.")
+        logger.warning(f"⚠️ ADVERTENCIA: No se encontró 'google-credentials.json' en los servidores de Render ni en Local.")
         return None
         
     try:
-        # El robot asume la identidad de quien asigna la tarea
         creds = service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_FILE, 
             scopes=SCOPES
@@ -157,15 +173,14 @@ def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invit
         
         service = build('calendar', 'v3', credentials=creds)
         
-        # EVENTO "TODO EL DÍA" Y SIN NOTIFICACIONES
         evento = {
             'summary': f"Inspección/Tarea: {titulo_proyecto}",
             'description': f"Tarea asignada desde Proeléctrica PMO:\n\n{descripcion}",
-            'start': {'date': fecha}, # Al usar 'date' en lugar de 'dateTime', Google lo hace "Todo el día"
+            'start': {'date': fecha}, 
             'end': {'date': fecha},
             'attendees': [{'email': correo_invitado}],
             'reminders': {
-                'useDefault': False # Apaga cualquier notificación programada
+                'useDefault': False 
             },
         }
         
@@ -173,7 +188,7 @@ def crear_evento_calendario(titulo_proyecto: str, descripcion: str, correo_invit
         return evento_creado.get('htmlLink')
         
     except Exception as e:
-        print(f"❌ Error al crear el evento de Google Calendar: {e}")
+        logger.error(f"❌ Error al crear el evento de Google Calendar: {e}")
         return None
 
 # =================================================================
@@ -288,6 +303,7 @@ async def crear_tarea(id_proyecto: int, payload: TareaCrear, db: Session = Depen
             "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         }
         proyecto.bitacora = bitacora_actual + [nuevo_log]
+        flag_modified(proyecto, "bitacora") # <-- Garantiza la persistencia JSON
         
         db.commit()
         return {"status": "success", "message": "Tarea creada y notificada exitosamente"}
@@ -301,7 +317,6 @@ async def editar_tarea(id_tarea: int, payload: TareaActualizar, db: Session = De
         tarea = db.query(TareaDB).filter(TareaDB.id == id_tarea).first()
         if not tarea: raise HTTPException(status_code=404, detail="Tarea no encontrada")
 
-        # Detectar qué cambió exactamente para la auditoría
         cambios = []
         if tarea.descripcion != payload.descripcion:
             cambios.append(f"Descripción (de '{tarea.descripcion}' a '{payload.descripcion}')")
@@ -313,7 +328,6 @@ async def editar_tarea(id_tarea: int, payload: TareaActualizar, db: Session = De
             cambios.append(f"Fecha (de '{tarea.fecha_limite}' a '{payload.fecha_limite}')")
             tarea.fecha_limite = payload.fecha_limite
 
-        # Si hubo cambios, registramos en la bitácora del proyecto
         if cambios:
             proyecto = db.query(ProyectoDB).filter(ProyectoDB.id == tarea.id_proyecto).first()
             if proyecto:
@@ -326,6 +340,7 @@ async def editar_tarea(id_tarea: int, payload: TareaActualizar, db: Session = De
                     "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 }
                 proyecto.bitacora = bitacora_actual + [nuevo_log]
+                flag_modified(proyecto, "bitacora") # <-- Garantiza la persistencia JSON
 
         db.commit()
         return {"status": "success"}
@@ -339,41 +354,51 @@ async def listar_tareas_proyecto(id_proyecto: int, db: Session = Depends(get_db)
 
 @app.get("/v1/tareas/operativo/{correo}", status_code=200)
 async def listar_mis_tareas(correo: str, db: Session = Depends(get_db)):
-    tareas = db.query(TareaDB).filter(TareaDB.asignado_a == correo, TareaDB.estado == 'Pendiente').order_by(TareaDB.fecha_limite.asc()).all()
-    resultado = []
-    for t in tareas:
-        proy = db.query(ProyectoDB).filter(ProyectoDB.id == t.id_proyecto).first()
-        nombre_proy = proy.titulo_proyecto if proy.titulo_proyecto else proy.empresa_solicitante if proy else "Desconocido"
-        resultado.append({
+    # <-- OPTIMIZACIÓN JOIN (Resuelve el N+1)
+    resultados = (
+        db.query(TareaDB, ProyectoDB.titulo_proyecto, ProyectoDB.empresa_solicitante)
+        .outerjoin(ProyectoDB, TareaDB.id_proyecto == ProyectoDB.id)
+        .filter(TareaDB.asignado_a == correo, TareaDB.estado == 'Pendiente')
+        .order_by(TareaDB.fecha_limite.asc())
+        .all()
+    )
+    return [
+        {
             "id": t.id,
-            "proyecto": nombre_proy,
-            "id_proyecto": t.id_proyecto,
-            "descripcion": t.descripcion,
-            "asignado_por": t.asignado_por,
-            "fecha_limite": t.fecha_limite,
-            "enlace_calendario": t.enlace_calendario
-        })
-    return resultado
-
-@app.get("/v1/tareas/activas", status_code=200)
-async def listar_todas_tareas_activas(db: Session = Depends(get_db)):
-    """Este endpoint trae todas las tareas pendientes de toda la empresa"""
-    tareas = db.query(TareaDB).filter(TareaDB.estado == 'Pendiente').order_by(TareaDB.fecha_limite.asc()).all()
-    resultado = []
-    for t in tareas:
-        proy = db.query(ProyectoDB).filter(ProyectoDB.id == t.id_proyecto).first()
-        nombre_proy = proy.titulo_proyecto if proy.titulo_proyecto else proy.empresa_solicitante if proy else "Desconocido"
-        resultado.append({
-            "id": t.id,
-            "proyecto": nombre_proy,
+            "proyecto": titulo or cliente or "Desconocido",
             "id_proyecto": t.id_proyecto,
             "descripcion": t.descripcion,
             "asignado_a": t.asignado_a,
             "asignado_por": t.asignado_por,
             "fecha_limite": t.fecha_limite,
             "enlace_calendario": t.enlace_calendario
-        })
-    return resultado
+        }
+        for t, titulo, cliente in resultados
+    ]
+
+@app.get("/v1/tareas/activas", status_code=200)
+async def listar_todas_tareas_activas(db: Session = Depends(get_db)):
+    # <-- OPTIMIZACIÓN JOIN (Resuelve el N+1)
+    resultados = (
+        db.query(TareaDB, ProyectoDB.titulo_proyecto, ProyectoDB.empresa_solicitante)
+        .outerjoin(ProyectoDB, TareaDB.id_proyecto == ProyectoDB.id)
+        .filter(TareaDB.estado == 'Pendiente')
+        .order_by(TareaDB.fecha_limite.asc())
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "proyecto": titulo or cliente or "Desconocido",
+            "id_proyecto": t.id_proyecto,
+            "descripcion": t.descripcion,
+            "asignado_a": t.asignado_a,
+            "asignado_por": t.asignado_por,
+            "fecha_limite": t.fecha_limite,
+            "enlace_calendario": t.enlace_calendario
+        }
+        for t, titulo, cliente in resultados
+    ]
 
 @app.put("/v1/tareas/{id_tarea}/completar", status_code=200)
 async def completar_tarea(id_tarea: int, db: Session = Depends(get_db)):
@@ -393,6 +418,7 @@ async def completar_tarea(id_tarea: int, db: Session = Depends(get_db)):
                 "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             }
             proyecto.bitacora = bitacora_actual + [nuevo_log]
+            flag_modified(proyecto, "bitacora") # <-- Garantiza la persistencia JSON
             
         db.commit()
         return {"status": "success"}
