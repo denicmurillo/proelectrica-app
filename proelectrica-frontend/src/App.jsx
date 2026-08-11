@@ -5,7 +5,7 @@ import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
   Dialog, DialogTitle, DialogContent, Box, Button, Divider, TextField, MenuItem, List, ListItem, ListItemText,
   ListItemAvatar, Avatar, IconButton, Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup,
-  Card, CardContent, CircularProgress, Autocomplete, Snackbar, Alert
+  Card, CardContent, CircularProgress, Autocomplete, Snackbar, Alert, InputAdornment
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
@@ -27,6 +27,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
+import SearchIcon from '@mui/icons-material/Search';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 
@@ -392,6 +393,9 @@ function App() {
   const [filtroEstado, setFiltroEstado] = useState('Activos');
   const [vistaDashboard, setVistaDashboard] = useState('Gerencia');
 
+  // NOVEDAD: ESTADO PARA EL BUSCADOR GLOBAL
+  const [busqueda, setBusqueda] = useState('');
+
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [datosNuevaTarea, setDatosNuevaTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
   const [creandoTarea, setCreandoTarea] = useState(false);
@@ -674,13 +678,35 @@ function App() {
   if (authCargando) return <Box sx={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
   if (!session) return <LoginScreen setSession={setSession} />;
 
+  // --- LÓGICA DE FILTRADO Y BÚSQUEDA ---
   const dataAplicacion = tabActual === 0 ? proyectos.filter(p => !isProyectoApp(p)) : proyectos.filter(p => isProyectoApp(p));
   let listaMostrar = dataAplicacion;
+
   if (filtroEstado !== 'Todos') {
     if (filtroEstado === 'Cotizaciones') listaMostrar = dataAplicacion.filter(p => p.estado && ["Nueva Solicitud", "Solicitud Generada", "Cotización"].includes(p.estado));
     else if (filtroEstado === 'Activos') listaMostrar = dataAplicacion.filter(p => p.estado && ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].includes(p.estado));
     else if (filtroEstado === 'Facturación') listaMostrar = dataAplicacion.filter(p => p.estado && ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(p.estado));
     else if (filtroEstado === 'Archivados') listaMostrar = dataAplicacion.filter(p => p.estado && ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(p.estado));
+  }
+
+  // NOVEDAD: Búsqueda Universal en Memoria (Instantánea)
+  if (busqueda.trim() !== '') {
+    const termino = busqueda.toLowerCase();
+    listaMostrar = listaMostrar.filter(p => {
+      const titulo = (p.titulo_proyecto || '').toLowerCase();
+      const cliente = (p.empresa_solicitante || '').toLowerCase();
+      const idDoc = (p.identificador_solicitud || '').toLowerCase();
+      const estado = (p.estado || '').toLowerCase();
+      const inspector = (p.inspector || '').toLowerCase();
+      const actividad = (p.datos_dinamicos?.detalles_tecnicos?.actividad || '').toLowerCase();
+
+      return titulo.includes(termino) ||
+        cliente.includes(termino) ||
+        idDoc.includes(termino) ||
+        estado.includes(termino) ||
+        inspector.includes(termino) ||
+        actividad.includes(termino);
+    });
   }
 
   const listaMostrarOrdenada = [...listaMostrar].sort((a, b) => {
@@ -717,7 +743,7 @@ function App() {
             <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
               <img src="/logo.png" alt="Proeléctrica" style={{ height: '38px' }} onError={(e) => { e.target.style.display = 'none'; }} />
             </Box>
-            <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
+            <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); setBusqueda(''); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
               <Tab icon={<FactCheckIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
               <Tab icon={<AccountTreeIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
               <Tab icon={<DashboardIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
@@ -773,9 +799,33 @@ function App() {
           </Paper>
 
           <Paper elevation={1} sx={{ flexGrow: 1, padding: '1.5rem', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{tabActual === 0 ? 'Verificaciones Eléctricas' : 'Portafolio de Proyectos'}</Typography>
-              {tabActual === 1 && <Button variant="contained" color="primary" size="small" startIcon={<AddIcon />} onClick={crearProyectoManual} sx={{ fontWeight: 'bold', borderRadius: '20px', textTransform: 'none' }}>Añadir Proyecto</Button>}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1e293b' }}>
+                {tabActual === 0 ? 'Verificaciones Eléctricas' : 'Portafolio de Proyectos'}
+              </Typography>
+
+              {/* BUSCADOR UNIVERSAL INTELIGENTE */}
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexGrow: 1, justifyContent: 'flex-end' }}>
+                <TextField
+                  size="small"
+                  placeholder="Buscar por cliente, proyecto, ID, estado..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon color="action" fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{ width: { xs: '100%', sm: '350px' }, backgroundColor: '#fff' }}
+                />
+                {tabActual === 1 && (
+                  <Button variant="contained" color="primary" size="small" startIcon={<AddIcon />} onClick={crearProyectoManual} sx={{ fontWeight: 'bold', borderRadius: '20px', textTransform: 'none', whiteSpace: 'nowrap' }}>
+                    Añadir Proyecto
+                  </Button>
+                )}
+              </Box>
             </Box>
             <TableContainer sx={{ overflowX: 'auto' }}>
               <Table size="small">
@@ -794,7 +844,7 @@ function App() {
                   )}
                 </TableHead>
                 <TableBody>
-                  {listaMostrarOrdenada.length === 0 ? <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para este filtro.</TableCell></TableRow> :
+                  {listaMostrarOrdenada.length === 0 ? <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para esta búsqueda/filtro.</TableCell></TableRow> :
                     listaMostrarOrdenada.map((proyecto) => (
                       <TableRow key={proyecto.id} hover style={{ cursor: 'pointer' }} onClick={() => abrirFicha(proyecto)}>
                         {tabActual === 0 ? (
