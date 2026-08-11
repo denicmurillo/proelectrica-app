@@ -216,6 +216,35 @@ def get_db():
 async def listar_proyectos(db: Session = Depends(get_db)):
     return db.query(ProyectoDB).order_by(ProyectoDB.id.desc()).all()
 
+@app.post("/v1/proyectos/webhook-forms", status_code=201)
+async def recibir_datos_formulario(payload: FormularioSolicitud, db: Session = Depends(get_db)):
+    try:
+        fecha_limpia = payload.fecha_solicitud[:10] if payload.fecha_solicitud else datetime.now().strftime("%Y-%m-%d")
+        datos_dinamicos_json = {
+            "tipo_registro": "Verificacion",
+            "ubicacion": payload.ubicacion.model_dump(),
+            "detalles_tecnicos": payload.detalles_tecnicos.model_dump(),
+            "contacto": payload.contacto.model_dump(),
+            "propietario": payload.propietario.model_dump(),
+            "seguimiento_inspeccion": payload.seguimiento_inspeccion,
+            "fecha_solicitud": fecha_limpia,
+            "cancelacion_pago": "No",
+            "moneda_cotizacion": "CRC"
+        }
+        nuevo_proyecto = ProyectoDB(
+            empresa_encargada="UVIE Proeléctrica",
+            empresa_solicitante=payload.empresa_solicitante,
+            correo_solicitante=payload.correo_solicitante,
+            datos_dinamicos=datos_dinamicos_json,
+            estado="Nueva Solicitud"
+        )
+        db.add(nuevo_proyecto)
+        db.commit()
+        db.refresh(nuevo_proyecto)
+        return {"status": "success", "id_proyecto": nuevo_proyecto.id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 @app.post("/v1/proyectos/manual", status_code=201)
 async def crear_proyecto_manual(db: Session = Depends(get_db)):
     try:
