@@ -54,10 +54,10 @@ const EMPRESAS_ENCARGADAS = ["Proeléctrica", "Edificaciones", "Investigaciones"
 const OPCIONES_SINO = ["Sí", "No"];
 const OPCIONES_PAGO = ["Pendiente", "Adelanto y Abonos", "Cancelado"];
 const ESTADOS_PROYECTO = ["Cotización", "Adjudicado", "En progreso", "Revisión por parte del cliente", "Completado y listo para facturar", "Facturado y pendiente de pago", "Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado"];
-const ESTADOS_PROGRESO_BLOQUEADO = ["Cotización", "Adjudicado", "Nueva Solicitud", "Solicitud Generada"];
+const ESTADOS_PROGRESO_BLOQUEADO = ["Cotización", "Adjudicado", "Nueva Solicitud", "Oferta Generada"];
 const SALUD_OPCIONES = ["Saludable", "Necesita atención", "En peligro"];
 const TALENTO_OPCIONES = ["Director de Proyecto", "Jefe de Cuadrilla", "Diseñador Eléctrico", "Diseñador Mecánico", "Técnico Electricista", "Ayudante", "Maestro de Obras", "Inspector eléctrico", "Inspector mecánico", "Dibujante"];
-const ESTADOS_VERIFICACION = ["Nueva Solicitud", "Solicitud Generada", "Pendiente de pago", "Adjudicado y pagado", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Finalizado y entregado", "Archivado no adjudicado"];
+const ESTADOS_VERIFICACION = ["Nueva Solicitud", "Oferta Generada", "Pendiente de pago", "Adjudicado y pagado", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Finalizado y entregado", "Archivado no adjudicado"];
 const SEGUIMIENTO_VERIFICACION = ["Primera inspección", "Reinspección"];
 const PROVINCIAS = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"];
 const COLORES_GRAFICOS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#f43f5e', '#64748b'];
@@ -81,31 +81,19 @@ const LoginScreen = ({ setSession }) => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrorMsg('');
+    e.preventDefault(); setLoading(true); setErrorMsg('');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setErrorMsg('Credenciales inválidas. Por favor, verifica tu correo y contraseña.');
-      setLoading(false);
-    } else {
-      setSession(data.session);
-    }
+    if (error) { setErrorMsg('Credenciales inválidas. Por favor, verifica tu correo y contraseña.'); setLoading(false); }
+    else { setSession(data.session); }
   };
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
       <Paper elevation={3} sx={{ p: 5, maxWidth: '400px', width: '100%', borderRadius: '12px', textAlign: 'center' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-          <img src="/logo.png" alt="Proeléctrica" style={{ height: '60px' }} onError={(e) => { e.target.style.display = 'none'; }} />
-        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}><img src="/logo.png" alt="Proeléctrica" style={{ height: '60px' }} onError={(e) => { e.target.style.display = 'none'; }} /></Box>
         <Typography variant="h5" fontWeight="bold" color="#1e293b" gutterBottom>Acceso al Sistema</Typography>
         <Typography variant="body2" color="textSecondary" mb={4}>Ingresa tus credenciales corporativas</Typography>
-        {errorMsg && (
-          <Box sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', p: 1.5, borderRadius: '6px', mb: 3 }}>
-            <Typography variant="body2" color="#e11d48">{errorMsg}</Typography>
-          </Box>
-        )}
+        {errorMsg && (<Box sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', p: 1.5, borderRadius: '6px', mb: 3 }}><Typography variant="body2" color="#e11d48">{errorMsg}</Typography></Box>)}
         <form onSubmit={handleLogin}>
           <TextField fullWidth label="Correo Electrónico" variant="outlined" margin="normal" value={email} onChange={(e) => setEmail(e.target.value)} required type="email" />
           <TextField fullWidth label="Contraseña" variant="outlined" margin="normal" value={password} onChange={(e) => setPassword(e.target.value)} required type="password" sx={{ mb: 3 }} />
@@ -121,24 +109,44 @@ const LoginScreen = ({ setSession }) => {
 // --- DASHBOARD ESTRATÉGICO ---
 const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual, abrirEdicionTarea }) => {
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
+  const [fechaFiltroInicio, setFechaFiltroInicio] = useState('');
+  const [fechaFiltroFin, setFechaFiltroFin] = useState('');
   const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
   const mGerencia = useMemo(() => {
-    let cuentasPorCobrar = 0; let totalFiltrado = 0; const conteoEmpresas = {};
+    let totalFiltrado = 0; const conteoEmpresas = {};
+    let pmoExitosos = 0, pmoPerdidos = 0;
+    let verifExitosos = 0, verifPerdidos = 0;
+
     proyectos.forEach(p => {
-      const monto = safeParseMonto(p.monto_cotizado);
+      const fechaOrden = getFechaOrdenamiento(p);
+      if (fechaFiltroInicio && fechaOrden < fechaFiltroInicio) return;
+      if (fechaFiltroFin && fechaOrden > fechaFiltroFin) return;
+
       const empresa = !isProyectoApp(p) ? (p.empresa_encargada || "UVIE Proeléctrica") : (p.empresa_encargada || "Sin Asignar");
       const estadoSeguro = p.estado || '';
-      conteoEmpresas[empresa] = (conteoEmpresas[empresa] || 0) + 1;
+
       const pasaFiltro = empresaFiltroGerencia === 'Todas' || empresa === empresaFiltroGerencia;
       if (pasaFiltro) {
         totalFiltrado++;
-        if (["Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) cuentasPorCobrar += monto;
+        conteoEmpresas[empresa] = (conteoEmpresas[empresa] || 0) + 1;
+
+        if (isProyectoApp(p)) {
+          if (['Adjudicado', 'En progreso', 'Revisión por parte del cliente', 'Completado y listo para facturar', 'Facturado y pendiente de pago', 'Pago recibido y proyecto archivado'].includes(estadoSeguro)) pmoExitosos++;
+          else if (['No se ejecutó. Proyecto archivado'].includes(estadoSeguro)) pmoPerdidos++;
+        } else {
+          if (['Adjudicado y pagado', 'Asignado y programado', 'Elaboración de informe', 'En revisión del Verificador', 'Finalizado y entregado'].includes(estadoSeguro)) verifExitosos++;
+          else if (['Archivado no adjudicado'].includes(estadoSeguro)) verifPerdidos++;
+        }
       }
     });
+
     const pieData = Object.keys(conteoEmpresas).map((key, index) => ({ id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length] })).filter(d => d.value > 0);
-    return { cuentasPorCobrar, pieData, total: totalFiltrado };
-  }, [proyectos, empresaFiltroGerencia]);
+    const efecPMO = (pmoExitosos + pmoPerdidos) > 0 ? Math.round((pmoExitosos / (pmoExitosos + pmoPerdidos)) * 100) : 0;
+    const efecVerif = (verifExitosos + verifPerdidos) > 0 ? Math.round((verifExitosos / (verifExitosos + verifPerdidos)) * 100) : 0;
+
+    return { pieData, total: totalFiltrado, efecPMO, efecVerif };
+  }, [proyectos, empresaFiltroGerencia, fechaFiltroInicio, fechaFiltroFin]);
 
   const mPMO = useMemo(() => {
     const pmoProyectos = proyectos.filter(p => isProyectoApp(p) && !(p.estado || '').includes('archivado'));
@@ -188,9 +196,7 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
       if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
         const logCambio = [...(p.bitacora || [])].reverse().find(log => log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
         let dias = 0;
-        if (logCambio && logCambio.id) {
-          dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
-        }
+        if (logCambio && logCambio.id) dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
         if (estadoSeguro === "Elaboración de informe" && dias > 10) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
         else if (estadoSeguro === "En revisión del Verificador" && dias > 2) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
       }
@@ -215,17 +221,21 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
 
       {vistaDashboard === 'Gerencia' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField select size="small" label="Filtrar por Empresa" value={empresaFiltroGerencia} onChange={(e) => setEmpresaFiltroGerencia(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', ...comunInputSx }}>
               <MenuItem value="Todas" sx={comunMenuSx}>Todas las Empresas</MenuItem>
               {EMPRESAS_ENCARGADAS.map(e => <MenuItem key={e} value={e} sx={comunMenuSx}>{e}</MenuItem>)}
               <MenuItem value="UVIE Proeléctrica" sx={comunMenuSx}>UVIE Proeléctrica</MenuItem>
               <MenuItem value="Sin Asignar" sx={comunMenuSx}>Sin Asignar</MenuItem>
             </TextField>
+            <TextField type="date" size="small" label="Fecha Inicio" InputLabelProps={{ shrink: true }} value={fechaFiltroInicio} onChange={(e) => setFechaFiltroInicio(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
+            <TextField type="date" size="small" label="Fecha Fin" InputLabelProps={{ shrink: true }} value={fechaFiltroFin} onChange={(e) => setFechaFiltroFin(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
+            {(fechaFiltroInicio || fechaFiltroFin) && <Button onClick={() => { setFechaFiltroInicio(''); setFechaFiltroFin(''); }} size="small" color="inherit">Limpiar Fechas</Button>}
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #f43f5e' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Cuentas por Cobrar ({empresaFiltroGerencia})</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AccountBalanceWalletIcon sx={{ color: '#f43f5e', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">₡ {mGerencia.cuentasPorCobrar.toLocaleString('es-CR')}</Typography></Box></CardContent></Card>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Operaciones ({empresaFiltroGerencia})</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography></Box></CardContent></Card>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 3 }}>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #10b981' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Efectividad Proyectos</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><FactCheckIcon sx={{ color: '#10b981', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.efecPMO}%</Typography></Box></CardContent></Card>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #0ea5e9' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Efectividad Verificaciones</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><FactCheckIcon sx={{ color: '#0ea5e9', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.efecVerif}%</Typography></Box></CardContent></Card>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Operaciones</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography></Box></CardContent></Card>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
@@ -393,7 +403,6 @@ function App() {
   const [filtroEstado, setFiltroEstado] = useState('Activos');
   const [vistaDashboard, setVistaDashboard] = useState('Gerencia');
 
-  // NOVEDAD: ESTADO PARA EL BUSCADOR GLOBAL
   const [busqueda, setBusqueda] = useState('');
 
   const [nuevoComentario, setNuevoComentario] = useState('');
@@ -603,6 +612,34 @@ function App() {
 
   const cerrarFicha = () => { setModalAbierto(false); setProyectoSeleccionado(null); };
 
+  const handleEliminarOArchivar = async () => {
+    const esProy = proyectoSeleccionado && isProyectoApp(proyectoSeleccionado);
+    if (esProy) {
+      if (window.confirm("ATENCIÓN: ¿Estás seguro de que deseas ELIMINAR permanentemente este proyecto? Esta acción borrará todo el expediente y sus tareas. No se puede deshacer.")) {
+        try {
+          await axios.delete(`${API_URL}/v1/proyectos/${proyectoSeleccionado.id}`);
+          mostrarMensaje("Proyecto eliminado exitosamente.", "success");
+          cerrarFicha();
+          cargarProyectos();
+        } catch (error) {
+          mostrarMensaje("Error al eliminar el proyecto.", "error");
+        }
+      }
+    } else {
+      if (window.confirm("¿Deseas ARCHIVAR esta verificación? (Quedará guardada con estado 'Archivado no adjudicado' para mantener la integridad de los registros).")) {
+        const nuevosDatosGC = { ...datosGC, estado: 'Archivado no adjudicado' };
+        const nombreUsuario = session?.user?.email?.split('@')[0] || 'Sistema';
+        const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: "Expediente archivado por la GC para mantener la integridad de los registros.", fecha: new Date().toLocaleString() }];
+
+        setDatosGC(nuevosDatosGC);
+        setBitacora(nuevaBitacora);
+        autoguardarEnBackend(nuevosDatosGC, nuevaBitacora, archivos, proyectoSeleccionado);
+        mostrarMensaje("Verificación archivada exitosamente.", "success");
+        cerrarFicha();
+      }
+    }
+  };
+
   const autoguardarEnBackend = async (nuevosDatosGC, nuevaBitacora, nuevosArchivos, proyectoBase) => {
     setEstadoGuardado('Guardando...');
     try {
@@ -683,13 +720,12 @@ function App() {
   let listaMostrar = dataAplicacion;
 
   if (filtroEstado !== 'Todos') {
-    if (filtroEstado === 'Cotizaciones') listaMostrar = dataAplicacion.filter(p => p.estado && ["Nueva Solicitud", "Solicitud Generada", "Cotización"].includes(p.estado));
+    if (filtroEstado === 'Cotizaciones') listaMostrar = dataAplicacion.filter(p => p.estado && ["Nueva Solicitud", "Oferta Generada", "Cotización"].includes(p.estado));
     else if (filtroEstado === 'Activos') listaMostrar = dataAplicacion.filter(p => p.estado && ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].includes(p.estado));
     else if (filtroEstado === 'Facturación') listaMostrar = dataAplicacion.filter(p => p.estado && ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(p.estado));
     else if (filtroEstado === 'Archivados') listaMostrar = dataAplicacion.filter(p => p.estado && ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(p.estado));
   }
 
-  // NOVEDAD: Búsqueda Universal en Memoria (Instantánea)
   if (busqueda.trim() !== '') {
     const termino = busqueda.toLowerCase();
     listaMostrar = listaMostrar.filter(p => {
@@ -719,7 +755,7 @@ function App() {
   const contarPorGrupo = (grupoEstados) => dataAplicacion.filter(p => p.estado && grupoEstados.some(est => p.estado.includes(est))).length;
   const renderizarEstado = (estadoBackend) => {
     let color = 'default'; const estadoSeguro = estadoBackend || '';
-    if (["Nueva Solicitud", "Solicitud Generada", "Cotización"].includes(estadoSeguro)) color = 'warning';
+    if (["Nueva Solicitud", "Oferta Generada", "Cotización"].includes(estadoSeguro)) color = 'warning';
     if (["Adjudicado", "En progreso", "Revisión", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].some(s => estadoSeguro.includes(s))) color = 'info';
     if (["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) color = 'primary';
     if (["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(estadoSeguro)) color = 'success';
@@ -743,7 +779,7 @@ function App() {
             <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
               <img src="/logo.png" alt="Proeléctrica" style={{ height: '38px' }} onError={(e) => { e.target.style.display = 'none'; }} />
             </Box>
-            <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); setBusqueda(''); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
+            <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); setBusqueda(''); setFiltroEstado('Activos'); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
               <Tab icon={<FactCheckIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
               <Tab icon={<AccountTreeIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
               <Tab icon={<DashboardIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
@@ -772,7 +808,7 @@ function App() {
               <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#8b5cf6', fontSize: '0.7rem' }}>COTIZACIONES</Typography></Box>
               <ListItemButton selected={filtroEstado === 'Cotizaciones'} onClick={() => setFiltroEstado('Cotizaciones')}>
                 <ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#7c3aed', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Nueva Solicitud", "Solicitud Generada", "Cotización"])}</Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Nueva Solicitud", "Oferta Generada", "Cotización"])}</Typography>
               </ListItemButton>
               <Divider />
 
@@ -878,7 +914,14 @@ function App() {
                 <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
                 {estadoGuardado && <Typography variant="caption" color={estadoGuardado.includes('Error') ? 'error' : 'textSecondary'} sx={{ fontStyle: 'italic', fontWeight: 'bold' }}>{estadoGuardado}</Typography>}
               </Box>
-              <IconButton onClick={cerrarFicha}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Tooltip title={esVistaProyecto ? "Eliminar Proyecto Permanentemente" : "Archivar Verificación"}>
+                  <IconButton color="error" onClick={handleEliminarOArchivar}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Tooltip>
+                <IconButton onClick={cerrarFicha}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
+              </Box>
             </DialogTitle>
             <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
               <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', px: '3rem', backgroundColor: '#fff', minHeight: 0 }}>
