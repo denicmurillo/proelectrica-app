@@ -73,6 +73,11 @@ const getFechaOrdenamiento = (p) => {
   return p.datos_dinamicos?.fecha_solicitud || p.fecha_programacion || '1970-01-01';
 };
 
+// FECHAS POR DEFECTO PARA EL AÑO EN CURSO
+const currentYear = new Date().getFullYear();
+const defaultStartDate = `${currentYear}-01-01`;
+const defaultEndDate = `${currentYear}-12-31`;
+
 // --- COMPONENTE DE AUTENTICACIÓN ---
 const LoginScreen = ({ setSession }) => {
   const [email, setEmail] = useState('');
@@ -109,8 +114,11 @@ const LoginScreen = ({ setSession }) => {
 // --- DASHBOARD ESTRATÉGICO ---
 const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual, abrirEdicionTarea }) => {
   const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
-  const [fechaFiltroInicio, setFechaFiltroInicio] = useState('');
-  const [fechaFiltroFin, setFechaFiltroFin] = useState('');
+
+  // APLICANDO FECHAS POR DEFECTO PARA EL AÑO EN CURSO
+  const [fechaFiltroInicio, setFechaFiltroInicio] = useState(defaultStartDate);
+  const [fechaFiltroFin, setFechaFiltroFin] = useState(defaultEndDate);
+
   const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
   const mGerencia = useMemo(() => {
@@ -142,10 +150,14 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
     });
 
     const pieData = Object.keys(conteoEmpresas).map((key, index) => ({ id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length] })).filter(d => d.value > 0);
-    const efecPMO = (pmoExitosos + pmoPerdidos) > 0 ? Math.round((pmoExitosos / (pmoExitosos + pmoPerdidos)) * 100) : 0;
-    const efecVerif = (verifExitosos + verifPerdidos) > 0 ? Math.round((verifExitosos / (verifExitosos + verifPerdidos)) * 100) : 0;
 
-    return { pieData, total: totalFiltrado, efecPMO, efecVerif };
+    const totalPMO = pmoExitosos + pmoPerdidos;
+    const efecPMO = totalPMO > 0 ? Math.round((pmoExitosos / totalPMO) * 100) : 0;
+
+    const totalVerif = verifExitosos + verifPerdidos;
+    const efecVerif = totalVerif > 0 ? Math.round((verifExitosos / totalVerif) * 100) : 0;
+
+    return { pieData, total: totalFiltrado, efecPMO, pmoExitosos, totalPMO, efecVerif, verifExitosos, totalVerif };
   }, [proyectos, empresaFiltroGerencia, fechaFiltroInicio, fechaFiltroFin]);
 
   const mPMO = useMemo(() => {
@@ -230,12 +242,38 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
             </TextField>
             <TextField type="date" size="small" label="Fecha Inicio" InputLabelProps={{ shrink: true }} value={fechaFiltroInicio} onChange={(e) => setFechaFiltroInicio(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
             <TextField type="date" size="small" label="Fecha Fin" InputLabelProps={{ shrink: true }} value={fechaFiltroFin} onChange={(e) => setFechaFiltroFin(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
-            {(fechaFiltroInicio || fechaFiltroFin) && <Button onClick={() => { setFechaFiltroInicio(''); setFechaFiltroFin(''); }} size="small" color="inherit">Limpiar Fechas</Button>}
+            <Button onClick={() => { setFechaFiltroInicio(defaultStartDate); setFechaFiltroFin(defaultEndDate); }} size="small" color="inherit">Reiniciar Año Actual</Button>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 3 }}>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #10b981' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Efectividad Proyectos</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><FactCheckIcon sx={{ color: '#10b981', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.efecPMO}%</Typography></Box></CardContent></Card>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #0ea5e9' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Efectividad Verificaciones</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><FactCheckIcon sx={{ color: '#0ea5e9', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.efecVerif}%</Typography></Box></CardContent></Card>
-            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}><CardContent><Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Operaciones</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} /><Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography></Box></CardContent></Card>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #10b981' }}>
+              <CardContent>
+                <Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Efectividad en Ventas: Proyectos</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                  <FactCheckIcon sx={{ color: '#10b981', fontSize: 30, position: 'relative', top: 5 }} />
+                  <Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.efecPMO}%</Typography>
+                  <Typography variant="subtitle1" color="textSecondary" fontWeight="bold">({mGerencia.pmoExitosos}/{mGerencia.totalPMO})</Typography>
+                </Box>
+              </CardContent>
+            </Card>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #0ea5e9' }}>
+              <CardContent>
+                <Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Efectividad en Ventas: Verificaciones</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                  <FactCheckIcon sx={{ color: '#0ea5e9', fontSize: 30, position: 'relative', top: 5 }} />
+                  <Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.efecVerif}%</Typography>
+                  <Typography variant="subtitle1" color="textSecondary" fontWeight="bold">({mGerencia.verifExitosos}/{mGerencia.totalVerif})</Typography>
+                </Box>
+              </CardContent>
+            </Card>
+            <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #8b5cf6' }}>
+              <CardContent>
+                <Typography color="textSecondary" variant="subtitle2" fontWeight="bold">Volumen Operaciones</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AssignmentTurnedInIcon sx={{ color: '#8b5cf6', fontSize: 32 }} />
+                  <Typography variant="h4" fontWeight="bold" color="#1e293b">{mGerencia.total} Registros</Typography>
+                </Box>
+              </CardContent>
+            </Card>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
             <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
