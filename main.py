@@ -108,6 +108,10 @@ class FormularioSolicitud(BaseModel):
     propietario: Propietario
     seguimiento_inspeccion: str
 
+class ActualizacionVBA(BaseModel):
+    id_proyecto: int
+    codigo_solicitud: str
+
 class GestionGC(BaseModel):
     titulo_proyecto: Optional[str] = ""
     empresa_encargada: Optional[str] = "Proeléctrica"
@@ -242,6 +246,32 @@ async def recibir_datos_formulario(payload: FormularioSolicitud, db: Session = D
         db.commit()
         db.refresh(nuevo_proyecto)
         return {"status": "success", "id_proyecto": nuevo_proyecto.id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/proyectos/actualizar-codigo", status_code=200)
+async def actualizar_codigo_vba(payload: ActualizacionVBA, db: Session = Depends(get_db)):
+    try:
+        proyecto = db.query(ProyectoDB).filter(ProyectoDB.id == payload.id_proyecto).first()
+        if not proyecto:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        
+        proyecto.identificador_solicitud = payload.codigo_solicitud
+        proyecto.estado = "Solicitud Generada"
+        
+        bitacora_actual = proyecto.bitacora if proyecto.bitacora else []
+        nuevo_log = {
+            "id": int(time.time() * 1000),
+            "autor": "Sistema (VBA Automático)",
+            "texto": f"Se asignó el documento oficial: {payload.codigo_solicitud}. El estado cambió a 'Solicitud Generada'.",
+            "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        }
+        proyecto.bitacora = bitacora_actual + [nuevo_log]
+        flag_modified(proyecto, "bitacora")
+        
+        db.commit()
+        return {"status": "success", "message": "Código y estado actualizados"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
