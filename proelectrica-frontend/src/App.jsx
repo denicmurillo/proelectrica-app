@@ -501,7 +501,15 @@ function App() {
         tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
           client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.readonly',
           callback: (tokenResponse) => {
-            if (tokenResponse && tokenResponse.access_token) { sessionStorage.setItem('googlePickerToken', tokenResponse.access_token); crearYMostrarPicker(tokenResponse.access_token); }
+            if (tokenResponse && tokenResponse.access_token) {
+              const expiresIn = (tokenResponse.expires_in || 3600) * 1000;
+              const expiryTime = Date.now() + expiresIn - 300000; // 5 minutos de buffer de seguridad
+              sessionStorage.setItem('googlePickerToken', JSON.stringify({
+                token: tokenResponse.access_token,
+                expiry: expiryTime
+              }));
+              crearYMostrarPicker(tokenResponse.access_token);
+            }
           },
         });
         clearInterval(checkGoogle);
@@ -511,8 +519,22 @@ function App() {
 
   const abrirGoogleDrivePicker = () => {
     if (!pickerCargado || !tokenClientRef.current) return mostrarMensaje("Conectando con Google... intenta de nuevo en unos segundos.", "info");
-    const tokenGuardado = sessionStorage.getItem('googlePickerToken');
-    if (tokenGuardado) crearYMostrarPicker(tokenGuardado); else tokenClientRef.current.requestAccessToken();
+
+    const tokenStr = sessionStorage.getItem('googlePickerToken');
+    if (tokenStr) {
+      try {
+        const tokenData = JSON.parse(tokenStr);
+        if (Date.now() < tokenData.expiry) {
+          crearYMostrarPicker(tokenData.token);
+          return;
+        }
+      } catch (e) {
+        // Ignorar error de parseo y solicitar nuevo token
+      }
+    }
+
+    sessionStorage.removeItem('googlePickerToken');
+    tokenClientRef.current.requestAccessToken();
   };
 
   const crearYMostrarPicker = (accessToken) => {
@@ -1035,7 +1057,7 @@ function App() {
                         <TextField fullWidth type="date" size="small" value={datosNuevaTarea.fecha_limite} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, fecha_limite: e.target.value })} sx={comunInputSx} />
                       </Box>
                       <Button fullWidth variant="contained" size="small" onClick={handleCrearTarea} disabled={creandoTarea} sx={{ textTransform: 'none' }}>
-                        {creandoTarea ? 'Creando y Notificando...' : 'Asignar Tarea'}
+                        {creandoTarea ? 'Guardando...' : 'Asignar Tarea'}
                       </Button>
                     </Box>
 
