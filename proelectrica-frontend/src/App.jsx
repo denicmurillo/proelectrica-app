@@ -30,6 +30,8 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import SearchIcon from '@mui/icons-material/Search';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { FilaDato, FilaEditable } from './components/ElementosUI';
+import { LoginScreen } from './views/LoginScreen';
 
 // --- ENTORNO Y CREDENCIALES ---
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -77,39 +79,6 @@ const getFechaOrdenamiento = (p) => {
 const currentYear = new Date().getFullYear();
 const defaultStartDate = `${currentYear}-01-01`;
 const defaultEndDate = `${currentYear}-12-31`;
-
-// --- COMPONENTE DE AUTENTICACIÓN ---
-const LoginScreen = ({ setSession }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const handleLogin = async (e) => {
-    e.preventDefault(); setLoading(true); setErrorMsg('');
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setErrorMsg('Credenciales inválidas. Por favor, verifica tu correo y contraseña.'); setLoading(false); }
-    else { setSession(data.session); }
-  };
-
-  return (
-    <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
-      <Paper elevation={3} sx={{ p: 5, maxWidth: '400px', width: '100%', borderRadius: '12px', textAlign: 'center' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}><img src="/logo.png" alt="Proeléctrica" style={{ height: '60px' }} onError={(e) => { e.target.style.display = 'none'; }} /></Box>
-        <Typography variant="h5" fontWeight="bold" color="#1e293b" gutterBottom>Acceso al Sistema</Typography>
-        <Typography variant="body2" color="textSecondary" mb={4}>Ingresa tus credenciales corporativas</Typography>
-        {errorMsg && (<Box sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', p: 1.5, borderRadius: '6px', mb: 3 }}><Typography variant="body2" color="#e11d48">{errorMsg}</Typography></Box>)}
-        <form onSubmit={handleLogin}>
-          <TextField fullWidth label="Correo Electrónico" variant="outlined" margin="normal" value={email} onChange={(e) => setEmail(e.target.value)} required type="email" />
-          <TextField fullWidth label="Contraseña" variant="outlined" margin="normal" value={password} onChange={(e) => setPassword(e.target.value)} required type="password" sx={{ mb: 3 }} />
-          <Button fullWidth type="submit" variant="contained" color="primary" size="large" disabled={loading} startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <LockOutlinedIcon />} sx={{ borderRadius: '8px', py: 1.2, fontWeight: 'bold', textTransform: 'none' }}>
-            {loading ? 'Verificando...' : 'Iniciar Sesión'}
-          </Button>
-        </form>
-      </Paper>
-    </Box>
-  );
-};
 
 // --- DASHBOARD ESTRATÉGICO ---
 const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual, abrirEdicionTarea }) => {
@@ -408,14 +377,6 @@ const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha
     </Box>
   );
 };
-
-// --- COMPONENTES AUXILIARES ---
-const FilaDato = ({ etiqueta, valor, colorValor = 'textPrimary' }) => (
-  <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.5 }}><Box sx={{ width: '180px', flexShrink: 0 }}><Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>{etiqueta}</Typography></Box><Box sx={{ flexGrow: 1 }}><Typography variant="body2" color={colorValor} sx={{ fontWeight: colorValor === 'primary' ? 'bold' : 'normal', color: colorValor === 'textPrimary' ? '#334155' : undefined }}>{valor || '---'}</Typography></Box></Box>
-);
-const FilaEditable = ({ etiqueta, children }) => (
-  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}><Box sx={{ width: '180px', flexShrink: 0 }}><Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>{etiqueta}</Typography></Box><Box sx={{ flexGrow: 1, maxWidth: '500px' }}>{children}</Box></Box>
-);
 
 // --- APP PRINCIPAL ---
 function App() {
@@ -773,7 +734,7 @@ function App() {
   };
 
   if (authCargando) return <Box sx={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
-  if (!session) return <LoginScreen setSession={setSession} />;
+  if (!session) return <LoginScreen setSession={setSession} supabase={supabase} />;
 
   // --- LÓGICA DE FILTRADO Y BÚSQUEDA ---
   const dataAplicacion = tabActual === 0 ? proyectos.filter(p => !isProyectoApp(p)) : proyectos.filter(p => isProyectoApp(p));
