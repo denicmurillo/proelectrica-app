@@ -1,36 +1,27 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
-  Dialog, DialogTitle, DialogContent, Box, Button, Divider, TextField, MenuItem, List, ListItem, ListItemText,
-  ListItemAvatar, Avatar, IconButton, Tabs, Tab, ListItemButton, Slider, Tooltip, ToggleButton, ToggleButtonGroup,
-  Card, CardContent, CircularProgress, Autocomplete, Snackbar, Alert, InputAdornment
+  Box, Button, Divider, TextField, MenuItem, List, ListItem, ListItemText, IconButton, Tabs, Tab, ListItemButton,
+  CircularProgress, Snackbar, Alert, InputAdornment, Dialog, DialogTitle, DialogContent, ListItemAvatar, Avatar, Tooltip
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import PersonIcon from '@mui/icons-material/Person';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import EventBusyIcon from '@mui/icons-material/EventBusy';
-import EditDocumentIcon from '@mui/icons-material/EditDocument';
-import SendIcon from '@mui/icons-material/Send';
 import LogoutIcon from '@mui/icons-material/Logout';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import SearchIcon from '@mui/icons-material/Search';
+import PersonIcon from '@mui/icons-material/Person';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import EditIcon from '@mui/icons-material/Edit';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 
-import { FilaDato, FilaEditable } from './components/ElementosUI';
+// --- IMPORTACIÓN DE MÓDULOS (LA NUEVA ARQUITECTURA) ---
+import { isProyectoApp, getFechaOrdenamiento, EQUIPO_PROELECTRICA, comunInputSx, comunMenuSx, ESTADOS_PROGRESO_BLOQUEADO } from './utils/constants';
 import { LoginScreen } from './views/LoginScreen';
 import { DashboardTab } from './views/DashboardTab';
+import { ExpedienteModal } from './components/ExpedienteModal';
 
 // --- ENTORNO Y CREDENCIALES ---
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -41,92 +32,52 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- ESTILOS Y CONSTANTES GLOBALES ---
-const comunInputSx = { '& .MuiInputBase-root': { fontSize: '0.875rem' } };
-const comunMenuSx = { fontSize: '0.875rem' };
-const EQUIPO_PROELECTRICA = [
-  { nombre: "Denic Murillo Murillo", correo: "dmurillo@proelectrica.net" },
-  { nombre: "Andrey Castro Herrera", correo: "acastro@proelectrica.net" },
-  { nombre: "Seidy Ortega Pérez", correo: "sortega@proelectrica.net" },
-  { nombre: "Jeffry Molina Aguilar", correo: "jmolina@proelectrica.net" },
-  { nombre: "Allan Gómez Chavarría", correo: "agomez@proelectrica.net" }
-];
-const EMPRESAS_ENCARGADAS = ["Proeléctrica", "Edificaciones", "Investigaciones"];
-const OPCIONES_SINO = ["Sí", "No"];
-const OPCIONES_PAGO = ["Pendiente", "Adelanto y Abonos", "Cancelado"];
-const ESTADOS_PROYECTO = ["Cotización", "Adjudicado", "En progreso", "Revisión por parte del cliente", "Completado y listo para facturar", "Facturado y pendiente de pago", "Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado"];
-const ESTADOS_PROGRESO_BLOQUEADO = ["Cotización", "Adjudicado", "Nueva Solicitud", "Oferta Generada"];
-const SALUD_OPCIONES = ["Saludable", "Necesita atención", "En peligro"];
-const TALENTO_OPCIONES = ["Director de Proyecto", "Jefe de Cuadrilla", "Diseñador Eléctrico", "Diseñador Mecánico", "Técnico Electricista", "Ayudante", "Maestro de Obras", "Inspector eléctrico", "Inspector mecánico", "Dibujante"];
-const ESTADOS_VERIFICACION = ["Nueva Solicitud", "Oferta Generada", "Pendiente de pago", "Adjudicado y pagado", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Finalizado y entregado", "Archivado no adjudicado"];
-const SEGUIMIENTO_VERIFICACION = ["Primera inspección", "Reinspección"];
-const PROVINCIAS = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"];
-const COLORES_GRAFICOS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#f43f5e', '#64748b'];
-
-const isProyectoApp = (p) => p?.datos_dinamicos?.tipo_registro === 'Proyecto' || p?.datos_dinamicos?.seguimiento_inspeccion === 'Ingreso Manual';
-const safeParseMonto = (val) => {
-  if (!val) return 0;
-  const num = Number(String(val).replace(/[^0-9.-]+/g, ""));
-  return isNaN(num) ? 0 : num;
-};
-const getFechaOrdenamiento = (p) => {
-  if (isProyectoApp(p)) return p.fecha_inicio || p.datos_dinamicos?.fecha_solicitud || '1970-01-01';
-  return p.datos_dinamicos?.fecha_solicitud || p.fecha_programacion || '1970-01-01';
-};
-
-// FECHAS POR DEFECTO PARA EL AÑO EN CURSO
-const currentYear = new Date().getFullYear();
-const defaultStartDate = `${currentYear}-01-01`;
-const defaultEndDate = `${currentYear}-12-31`;
-
-// --- APP PRINCIPAL ---
 function App() {
+  // --- ESTADOS GLOBALES ---
   const [session, setSession] = useState(null);
   const [authCargando, setAuthCargando] = useState(true);
   const [proyectos, setProyectos] = useState([]);
-
   const [todasLasTareas, setTodasLasTareas] = useState([]);
   const [tareasProyecto, setTareasProyecto] = useState([]);
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const mostrarMensaje = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
 
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [estadoGuardado, setEstadoGuardado] = useState('');
-
-  const [tabDerecha, setTabDerecha] = useState(0);
-  const [bitacoraExpandida, setBitacoraExpandida] = useState(false);
-  const [tareasExpandidas, setTareasExpandidas] = useState(false);
-
-  const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
+  // --- CONTROL DE NAVEGACIÓN Y VISTAS ---
   const [tabActual, setTabActual] = useState(1);
   const [filtroEstado, setFiltroEstado] = useState('Activos');
   const [vistaDashboard, setVistaDashboard] = useState('Gerencia');
-
   const [busqueda, setBusqueda] = useState('');
 
+  // --- CONTROL DE MODALES ---
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [bitacoraExpandida, setBitacoraExpandida] = useState(false);
+  const [tareasExpandidas, setTareasExpandidas] = useState(false);
+  const [tareaEditando, setTareaEditando] = useState(null);
+  const [tabDerecha, setTabDerecha] = useState(0);
+
+  // --- ESTADOS DE DATOS ---
+  const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
+  const [estadoGuardado, setEstadoGuardado] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [datosNuevaTarea, setDatosNuevaTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
   const [creandoTarea, setCreandoTarea] = useState(false);
-  const [tareaEditando, setTareaEditando] = useState(null);
   const [datosEdicionTarea, setDatosEdicionTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
-
   const [bitacora, setBitacora] = useState([]);
   const [archivos, setArchivos] = useState([]);
+  const [datosGC, setDatosGC] = useState({});
+  const [datosGuardados, setDatosGuardados] = useState({});
 
+  // --- REFERENCIAS ---
   const chatEndRef = useRef(null);
   const chatExpandedEndRef = useRef(null);
   const tokenClientRef = useRef(null);
   const [pickerCargado, setPickerCargado] = useState(false);
 
-  const [datosGC, setDatosGC] = useState({
-    tituloProyecto: '', empresaEncargada: 'Proeléctrica', empresa_solicitante: '', correo_solicitante: '', estado: '', montoCotizado: '', inspector: '', colaboradores: [], fechaProgramacion: '', fechaInicio: '', fechaFin: '', seguimiento: '', pago: 'Pendiente', progreso: 0, provincia: '', canton: '', distrito: '', exacta: '', actividad: '', cantidad_permisos: '', area_m2: '', contactoNombre: '', contactoTelefono: '', propietarioNombre: '', propietarioCedula: '', presupuestoGastos: '', monedaPresupuesto: 'CRC', resultadosProyecto: '', talentoRequerido: [], otroTalento: '', saludProyecto: 'Saludable', fechaSolicitud: '', cancelacionPago: 'No', monedaCotizacion: 'CRC'
-  });
-  const [datosGuardados, setDatosGuardados] = useState({});
-
   const estadoActualRef = useRef({ archivos, bitacora, datosGC, proyectoSeleccionado });
   useEffect(() => { estadoActualRef.current = { archivos, bitacora, datosGC, proyectoSeleccionado }; }, [archivos, bitacora, datosGC, proyectoSeleccionado]);
 
+  // --- EFECTOS PRINCIPALES ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthCargando(false); });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); });
@@ -148,8 +99,7 @@ function App() {
     if (chatExpandedEndRef.current) chatExpandedEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [bitacora, modalAbierto, bitacoraExpandida, tabDerecha]);
 
-  const cerrarSesion = async () => { await supabase.auth.signOut(); };
-
+  // --- LÓGICA DE GOOGLE DRIVE ---
   const inyectarSolucionZIndex = () => {
     const style = document.createElement('style');
     style.innerHTML = `.picker-dialog { z-index: 100000 !important; } .picker-dialog-bg { z-index: 99999 !important; }`;
@@ -165,11 +115,8 @@ function App() {
           callback: (tokenResponse) => {
             if (tokenResponse && tokenResponse.access_token) {
               const expiresIn = (tokenResponse.expires_in || 3600) * 1000;
-              const expiryTime = Date.now() + expiresIn - 300000; // 5 minutos de buffer de seguridad
-              sessionStorage.setItem('googlePickerToken', JSON.stringify({
-                token: tokenResponse.access_token,
-                expiry: expiryTime
-              }));
+              const expiryTime = Date.now() + expiresIn - 300000; // 5 minutos buffer
+              sessionStorage.setItem('googlePickerToken', JSON.stringify({ token: tokenResponse.access_token, expiry: expiryTime }));
               crearYMostrarPicker(tokenResponse.access_token);
             }
           },
@@ -181,20 +128,13 @@ function App() {
 
   const abrirGoogleDrivePicker = () => {
     if (!pickerCargado || !tokenClientRef.current) return mostrarMensaje("Conectando con Google... intenta de nuevo en unos segundos.", "info");
-
     const tokenStr = sessionStorage.getItem('googlePickerToken');
     if (tokenStr) {
       try {
         const tokenData = JSON.parse(tokenStr);
-        if (Date.now() < tokenData.expiry) {
-          crearYMostrarPicker(tokenData.token);
-          return;
-        }
-      } catch (e) {
-        // Ignorar error de parseo y solicitar nuevo token
-      }
+        if (Date.now() < tokenData.expiry) { crearYMostrarPicker(tokenData.token); return; }
+      } catch (e) { }
     }
-
     sessionStorage.removeItem('googlePickerToken');
     tokenClientRef.current.requestAccessToken();
   };
@@ -233,60 +173,41 @@ function App() {
     autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
   };
 
+  // --- LÓGICA DE API (CRUD) ---
   const cargarProyectos = async () => { try { const respuesta = await axios.get(`${API_URL}/v1/proyectos`); setProyectos(respuesta.data); } catch (error) { console.error(error); } };
-
-  const cargarTodasLasTareas = async () => {
-    if (!session?.user?.email) return;
-    try { const res = await axios.get(`${API_URL}/v1/tareas/activas`); setTodasLasTareas(res.data); }
-    catch (e) { console.error(e); }
-  };
-
-  const cargarTareasProyecto = async (id_proyecto) => {
-    try { const res = await axios.get(`${API_URL}/v1/proyectos/${id_proyecto}/tareas`); setTareasProyecto(res.data); }
-    catch (e) { console.error(e); }
-  };
+  const cargarTodasLasTareas = async () => { if (!session?.user?.email) return; try { const res = await axios.get(`${API_URL}/v1/tareas/activas`); setTodasLasTareas(res.data); } catch (e) { console.error(e); } };
+  const cargarTareasProyecto = async (id_proyecto) => { try { const res = await axios.get(`${API_URL}/v1/proyectos/${id_proyecto}/tareas`); setTareasProyecto(res.data); } catch (e) { console.error(e); } };
+  const cerrarSesion = async () => { await supabase.auth.signOut(); };
 
   const handleCrearTarea = async () => {
-    if (!datosNuevaTarea.descripcion || !datosNuevaTarea.asignado_a || !datosNuevaTarea.fecha_limite) return mostrarMensaje("Por favor, completa todos los campos de la tarea.", "warning");
+    if (!datosNuevaTarea.descripcion || !datosNuevaTarea.asignado_a || !datosNuevaTarea.fecha_limite) return mostrarMensaje("Por favor, completa todos los campos.", "warning");
     setCreandoTarea(true);
     try {
-      const payload = {
-        descripcion: datosNuevaTarea.descripcion,
-        asignado_a: datosNuevaTarea.asignado_a,
-        asignado_por: session.user.email.split('@')[0],
-        correo_asignador: session.user.email,
-        fecha_limite: datosNuevaTarea.fecha_limite
-      };
+      const payload = { descripcion: datosNuevaTarea.descripcion, asignado_a: datosNuevaTarea.asignado_a, asignado_por: session.user.email.split('@')[0], correo_asignador: session.user.email, fecha_limite: datosNuevaTarea.fecha_limite };
       await axios.post(`${API_URL}/v1/proyectos/${proyectoSeleccionado.id}/tareas`, payload);
       setDatosNuevaTarea({ descripcion: '', asignado_a: '', fecha_limite: '' });
-      cargarTareasProyecto(proyectoSeleccionado.id);
-      cargarProyectos();
-      mostrarMensaje("Tarea asignada y notificada correctamente.");
-    } catch (e) { mostrarMensaje("Hubo un error al crear la tarea.", "error"); }
+      cargarTareasProyecto(proyectoSeleccionado.id); cargarProyectos();
+      mostrarMensaje("Tarea asignada correctamente.");
+    } catch (e) { mostrarMensaje("Error al crear tarea.", "error"); }
     setCreandoTarea(false);
   };
 
   const handleCompletarTarea = async (id_tarea) => {
     try {
       await axios.put(`${API_URL}/v1/tareas/${id_tarea}/completar`);
-      cargarTodasLasTareas();
-      if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
-      cargarProyectos();
-      mostrarMensaje("Tarea marcada como completada.");
-    } catch (e) { mostrarMensaje("Error al completar la tarea.", "error"); }
+      cargarTodasLasTareas(); if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id); cargarProyectos();
+      mostrarMensaje("Tarea completada.");
+    } catch (e) { mostrarMensaje("Error al completar.", "error"); }
   };
 
   const handleGuardarEdicionTarea = async () => {
-    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return mostrarMensaje("Completa todos los campos para editar la tarea.", "warning");
+    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return mostrarMensaje("Completa todos los campos.", "warning");
     try {
-      const payload = { ...datosEdicionTarea, modificado_por: session.user.email.split('@')[0] };
-      await axios.put(`${API_URL}/v1/tareas/${tareaEditando.id}`, payload);
-      setTareaEditando(null);
-      cargarTodasLasTareas();
-      if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id);
-      cargarProyectos();
-      mostrarMensaje("Tarea editada correctamente.");
-    } catch (e) { mostrarMensaje("Error al editar tarea.", "error"); }
+      await axios.put(`${API_URL}/v1/tareas/${tareaEditando.id}`, { ...datosEdicionTarea, modificado_por: session.user.email.split('@')[0] });
+      setTareaEditando(null); cargarTodasLasTareas();
+      if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id); cargarProyectos();
+      mostrarMensaje("Tarea editada.");
+    } catch (e) { mostrarMensaje("Error al editar.", "error"); }
   };
 
   const abrirEdicionTarea = (tarea) => {
@@ -312,20 +233,13 @@ function App() {
 
   const abrirFicha = (proyecto) => {
     if (!proyecto) return;
-    setProyectoSeleccionado(proyecto);
-    cargarTareasProyecto(proyecto.id);
-    setTabDerecha(0);
+    setProyectoSeleccionado(proyecto); cargarTareasProyecto(proyecto.id); setTabDerecha(0);
 
-    let colabArray = [];
-    if (Array.isArray(proyecto.datos_dinamicos?.colaboradores)) {
-      colabArray = proyecto.datos_dinamicos.colaboradores;
-    } else if (proyecto.datos_dinamicos?.colaboradores) {
-      colabArray = [proyecto.datos_dinamicos.colaboradores];
-    }
+    let colabArray = Array.isArray(proyecto.datos_dinamicos?.colaboradores) ? proyecto.datos_dinamicos.colaboradores : (proyecto.datos_dinamicos?.colaboradores ? [proyecto.datos_dinamicos.colaboradores] : []);
     colabArray = colabArray.filter(c => typeof c === 'string' && c.trim() !== "");
 
     const datosIniciales = {
-      tituloProyecto: proyecto.titulo_proyecto || '', empresaEncargada: proyecto.empresa_encargada || 'Proeléctrica', empresa_solicitante: proyecto.empresa_solicitante || '', correo_solicitante: proyecto.correo_solicitante || '', estado: proyecto.estado || 'Nueva Solicitud', montoCotizado: proyecto.monto_cotizado || '', inspector: proyecto.inspector || '', colaboradores: colabArray.length > 0 ? colabArray : [], fechaProgramacion: formatFechaInput(proyecto.fecha_programacion), fechaInicio: formatFechaInput(proyecto.fecha_inicio), fechaFin: formatFechaInput(proyecto.fecha_fin), fechaSolicitud: formatFechaInput(proyecto.datos_dinamicos?.fecha_solicitud), seguimiento: proyecto.datos_dinamicos?.seguimiento_inspeccion || '', pago: proyecto.pago || 'Pendiente', cancelacionPago: proyecto.datos_dinamicos?.cancelacion_pago || 'No', progreso: proyecto.progreso || 0, provincia: proyecto.datos_dinamicos?.ubicacion?.provincia || '', canton: proyecto.datos_dinamicos?.ubicacion?.canton || '', distrito: proyecto.datos_dinamicos?.ubicacion?.distrito || '', exacta: proyecto.datos_dinamicos?.ubicacion?.exacta || '', actividad: proyecto.datos_dinamicos?.detalles_tecnicos?.actividad || '', cantidad_permisos: proyecto.datos_dinamicos?.detalles_tecnicos?.cantidad_permisos || '', area_m2: proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '', contactoNombre: proyecto.datos_dinamicos?.contacto?.nombre || '', contactoTelefono: proyecto.datos_dinamicos?.contacto?.telefono || '', propietarioNombre: proyecto.datos_dinamicos?.propietario?.nombre || '', propietarioCedula: proyecto.datos_dinamicos?.propietario?.cedula || '', presupuestoGastos: proyecto.presupuesto_gastos || '', saludProyecto: proyecto.salud_proyecto || 'Saludable', monedaPresupuesto: proyecto.datos_dinamicos?.moneda_presupuesto || 'CRC', monedaCotizacion: proyecto.datos_dinamicos?.moneda_cotizacion || 'CRC', resultadosProyecto: proyecto.datos_dinamicos?.resultados_proyecto || '', talentoRequerido: proyecto.datos_dinamicos?.talento_requerido || [], otroTalento: proyecto.datos_dinamicos?.otro_talento || ''
+      tituloProyecto: proyecto.titulo_proyecto || '', empresaEncargada: proyecto.empresa_encargada || 'Proeléctrica', empresa_solicitante: proyecto.empresa_solicitante || '', correo_solicitante: proyecto.correo_solicitante || '', estado: proyecto.estado || 'Nueva Solicitud', montoCotizado: proyecto.monto_cotizado || '', inspector: proyecto.inspector || '', colaboradores: colabArray, fechaProgramacion: formatFechaInput(proyecto.fecha_programacion), fechaInicio: formatFechaInput(proyecto.fecha_inicio), fechaFin: formatFechaInput(proyecto.fecha_fin), fechaSolicitud: formatFechaInput(proyecto.datos_dinamicos?.fecha_solicitud), seguimiento: proyecto.datos_dinamicos?.seguimiento_inspeccion || '', pago: proyecto.pago || 'Pendiente', cancelacionPago: proyecto.datos_dinamicos?.cancelacion_pago || 'No', progreso: proyecto.progreso || 0, provincia: proyecto.datos_dinamicos?.ubicacion?.provincia || '', canton: proyecto.datos_dinamicos?.ubicacion?.canton || '', distrito: proyecto.datos_dinamicos?.ubicacion?.distrito || '', exacta: proyecto.datos_dinamicos?.ubicacion?.exacta || '', actividad: proyecto.datos_dinamicos?.detalles_tecnicos?.actividad || '', cantidad_permisos: proyecto.datos_dinamicos?.detalles_tecnicos?.cantidad_permisos || '', area_m2: proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '', contactoNombre: proyecto.datos_dinamicos?.contacto?.nombre || '', contactoTelefono: proyecto.datos_dinamicos?.contacto?.telefono || '', propietarioNombre: proyecto.datos_dinamicos?.propietario?.nombre || '', propietarioCedula: proyecto.datos_dinamicos?.propietario?.cedula || '', presupuestoGastos: proyecto.presupuesto_gastos || '', saludProyecto: proyecto.salud_proyecto || 'Saludable', monedaPresupuesto: proyecto.datos_dinamicos?.moneda_presupuesto || 'CRC', monedaCotizacion: proyecto.datos_dinamicos?.moneda_cotizacion || 'CRC', resultadosProyecto: proyecto.datos_dinamicos?.resultados_proyecto || '', talentoRequerido: proyecto.datos_dinamicos?.talento_requerido || [], otroTalento: proyecto.datos_dinamicos?.otro_talento || ''
     };
     setDatosGC(datosIniciales); setDatosGuardados(datosIniciales);
     setBitacora(proyecto.bitacora?.length > 0 ? proyecto.bitacora : [{ id: 1, autor: 'Sistema', texto: 'Registro inicial creado.', fecha: proyecto.datos_dinamicos?.fecha_solicitud || new Date().toLocaleString() }]);
@@ -341,23 +255,17 @@ function App() {
         try {
           await axios.delete(`${API_URL}/v1/proyectos/${proyectoSeleccionado.id}`);
           mostrarMensaje("Proyecto eliminado exitosamente.", "success");
-          cerrarFicha();
-          cargarProyectos();
-        } catch (error) {
-          mostrarMensaje("Error al eliminar el proyecto.", "error");
-        }
+          cerrarFicha(); cargarProyectos();
+        } catch (error) { mostrarMensaje("Error al eliminar el proyecto.", "error"); }
       }
     } else {
       if (window.confirm("¿Deseas ARCHIVAR esta verificación? (Quedará guardada con estado 'Archivado no adjudicado' para mantener la integridad de los registros).")) {
         const nuevosDatosGC = { ...datosGC, estado: 'Archivado no adjudicado' };
         const nombreUsuario = session?.user?.email?.split('@')[0] || 'Sistema';
         const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: "Expediente archivado por la GC para mantener la integridad de los registros.", fecha: new Date().toLocaleString() }];
-
-        setDatosGC(nuevosDatosGC);
-        setBitacora(nuevaBitacora);
+        setDatosGC(nuevosDatosGC); setBitacora(nuevaBitacora);
         autoguardarEnBackend(nuevosDatosGC, nuevaBitacora, archivos, proyectoSeleccionado);
-        mostrarMensaje("Verificación archivada exitosamente.", "success");
-        cerrarFicha();
+        mostrarMensaje("Verificación archivada exitosamente.", "success"); cerrarFicha();
       }
     }
   };
@@ -376,12 +284,8 @@ function App() {
         titulo_proyecto: nuevosDatosGC.tituloProyecto, empresa_encargada: nuevosDatosGC.empresaEncargada, empresa_solicitante: nuevosDatosGC.empresa_solicitante, correo_solicitante: nuevosDatosGC.correo_solicitante, estado: nuevosDatosGC.estado, seguimiento: nuevosDatosGC.seguimiento, monto_cotizado: nuevosDatosGC.montoCotizado, pago: nuevosDatosGC.pago, inspector: nuevosDatosGC.inspector, fecha_programacion: nuevosDatosGC.fechaProgramacion, fecha_inicio: nuevosDatosGC.fechaInicio, fecha_fin: nuevosDatosGC.fechaFin, progreso: nuevosDatosGC.progreso, presupuesto_gastos: nuevosDatosGC.presupuestoGastos, salud_proyecto: nuevosDatosGC.saludProyecto, bitacora: nuevaBitacora, archivos: nuevosArchivos, datos_dinamicos: datosDinamicosActualizados
       };
       await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
-      setEstadoGuardado('Guardado');
-      setTimeout(() => setEstadoGuardado(''), 2000);
-    } catch (error) {
-      setEstadoGuardado('Error al guardar');
-      mostrarMensaje("Hubo un error de conexión al autoguardar.", "error");
-    }
+      setEstadoGuardado('Guardado'); setTimeout(() => setEstadoGuardado(''), 2000);
+    } catch (error) { setEstadoGuardado('Error al guardar'); mostrarMensaje("Hubo un error de conexión al autoguardar.", "error"); }
   };
 
   const verificarYGuardarCampo = (campo, valorNuevo) => {
@@ -389,29 +293,17 @@ function App() {
     let progresoAjustado = datosGC.progreso;
     if (campo === 'estado' && ESTADOS_PROGRESO_BLOQUEADO.includes(valorNuevo)) progresoAjustado = 0;
 
-    const esProy = proyectoSeleccionado && isProyectoApp(proyectoSeleccionado);
-    const nombresLegibles = {
-      tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Contacto (Email)", estado: "Estado (Status)", seguimiento: "Seguimiento", montoCotizado: "Monto Cotizado", pago: "Estado de Pago", cancelacionPago: "Cancelación del pago", inspector: "Administrador / Inspector", colaboradores: "Colaboradores",
-      fechaInicio: esProy ? "Fecha de Inicio" : "Fecha Inspección",
-      fechaFin: esProy ? "Fecha Final" : "Prevista Entrega",
-      fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)", provincia: "Provincia", canton: "Cantón", distrito: "Distrito", exacta: "Dirección Exacta", actividad: "Actividad", cantidad_permisos: "Cantidad de Permisos", area_m2: "Área (m²)", contactoNombre: "Nombre Contacto", contactoTelefono: "Teléfono Contacto", propietarioNombre: "Nombre Propietario", propietarioCedula: "Cédula Propietario", presupuestoGastos: "Presupuesto de Gastos", monedaPresupuesto: "Moneda de Presupuesto", monedaCotizacion: "Moneda de Cotización", resultadosProyecto: "Resultados del Proyecto", talentoRequerido: "Talento Requerido", otroTalento: "Otro Talento", saludProyecto: "Salud del Proyecto"
-    };
+    const nombresLegibles = { tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Contacto (Email)", estado: "Estado (Status)", seguimiento: "Seguimiento", montoCotizado: "Monto Cotizado", pago: "Estado de Pago", cancelacionPago: "Cancelación del pago", inspector: "Administrador / Inspector", colaboradores: "Colaboradores", fechaInicio: "Fecha Inicial", fechaFin: "Fecha Final", fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)", provincia: "Provincia", canton: "Cantón", distrito: "Distrito", exacta: "Dirección Exacta", actividad: "Actividad", cantidad_permisos: "Cantidad de Permisos", area_m2: "Área (m²)", contactoNombre: "Nombre Contacto", contactoTelefono: "Teléfono Contacto", propietarioNombre: "Nombre Propietario", propietarioCedula: "Cédula Propietario", presupuestoGastos: "Presupuesto de Gastos", monedaPresupuesto: "Moneda de Presupuesto", monedaCotizacion: "Moneda de Cotización", resultadosProyecto: "Resultados del Proyecto", talentoRequerido: "Talento Requerido", otroTalento: "Otro Talento", saludProyecto: "Salud del Proyecto" };
 
     let valorFormateado = valorNuevo === '' || valorNuevo === null ? 'Vacío' : valorNuevo;
     if (campo === 'progreso') valorFormateado = `${valorNuevo}%`;
-
-    if (campo === 'talentoRequerido' || campo === 'colaboradores') {
-      valorFormateado = Array.isArray(valorNuevo) ? (valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno') : valorNuevo;
-    }
+    if (campo === 'talentoRequerido' || campo === 'colaboradores') valorFormateado = Array.isArray(valorNuevo) ? (valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno') : valorNuevo;
 
     const nombreUsuario = session?.user?.email?.split('@')[0] || 'Sistema';
-    const nuevoLog = { id: Date.now(), autor: nombreUsuario, texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString() };
-    const nuevaBitacora = [...bitacora, nuevoLog];
+    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString() }];
     const nuevosDatosGC = { ...datosGC, [campo]: valorNuevo, progreso: progresoAjustado };
 
-    setBitacora(nuevaBitacora);
-    setDatosGC(nuevosDatosGC);
-    setDatosGuardados(nuevosDatosGC);
+    setBitacora(nuevaBitacora); setDatosGC(nuevosDatosGC); setDatosGuardados(nuevosDatosGC);
     autoguardarEnBackend(nuevosDatosGC, nuevaBitacora, archivos, proyectoSeleccionado);
   };
 
@@ -457,13 +349,7 @@ function App() {
       const estado = (p.estado || '').toLowerCase();
       const inspector = (p.inspector || '').toLowerCase();
       const actividad = (p.datos_dinamicos?.detalles_tecnicos?.actividad || '').toLowerCase();
-
-      return titulo.includes(termino) ||
-        cliente.includes(termino) ||
-        idDoc.includes(termino) ||
-        estado.includes(termino) ||
-        inspector.includes(termino) ||
-        actividad.includes(termino);
+      return titulo.includes(termino) || cliente.includes(termino) || idDoc.includes(termino) || estado.includes(termino) || inspector.includes(termino) || actividad.includes(termino);
     });
   }
 
@@ -484,14 +370,14 @@ function App() {
     return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
   };
 
-  const esVistaProyecto = proyectoSeleccionado && isProyectoApp(proyectoSeleccionado);
-  const esProgresoBloqueado = ESTADOS_PROGRESO_BLOQUEADO.includes(datosGC.estado);
   const tableCellSx = { fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px', py: 1.5 };
   const tableHeadSx = { ...tableCellSx, fontWeight: 'bold', color: '#475569' };
 
+  // Derivados para el Modal
   const NOMBRES_EQUIPO = EQUIPO_PROELECTRICA.map(e => e.nombre);
   const inspectorOpciones = [...new Set([...NOMBRES_EQUIPO, datosGC.inspector])].filter(Boolean);
   const colabOpciones = [...new Set([...NOMBRES_EQUIPO, ...(datosGC.colaboradores || [])])].filter(Boolean);
+  const esVistaProyecto = proyectoSeleccionado && isProyectoApp(proyectoSeleccionado);
 
   return (
     <Box sx={{ backgroundColor: '#f1f5f9', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -561,27 +447,10 @@ function App() {
               <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1e293b' }}>
                 {tabActual === 0 ? 'Verificaciones Eléctricas' : 'Portafolio de Proyectos'}
               </Typography>
-
-              {/* BUSCADOR UNIVERSAL INTELIGENTE */}
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexGrow: 1, justifyContent: 'flex-end' }}>
-                <TextField
-                  size="small"
-                  placeholder="Buscar por cliente, proyecto, ID, estado..."
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon color="action" fontSize="small" />
-                      </InputAdornment>
-                    ),
-                  }}
-                  sx={{ width: { xs: '100%', sm: '350px' }, backgroundColor: '#fff' }}
-                />
+                <TextField size="small" placeholder="Buscar por cliente, proyecto, ID, estado..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="action" fontSize="small" /></InputAdornment>), }} sx={{ width: { xs: '100%', sm: '350px' }, backgroundColor: '#fff' }} />
                 {tabActual === 1 && (
-                  <Button variant="contained" color="primary" size="small" startIcon={<AddIcon />} onClick={crearProyectoManual} sx={{ fontWeight: 'bold', borderRadius: '20px', textTransform: 'none', whiteSpace: 'nowrap' }}>
-                    Añadir Proyecto
-                  </Button>
+                  <Button variant="contained" color="primary" size="small" startIcon={<AddIcon />} onClick={crearProyectoManual} sx={{ fontWeight: 'bold', borderRadius: '20px', textTransform: 'none', whiteSpace: 'nowrap' }}>Añadir Proyecto</Button>
                 )}
               </Box>
             </Box>
@@ -627,174 +496,12 @@ function App() {
         </Box>
       )}
 
-      {/* MODAL PRINCIPAL */}
-      <Dialog open={modalAbierto} onClose={cerrarFicha} maxWidth="xl" fullWidth sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}>
-        {proyectoSeleccionado && (
-          <>
-            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, flexShrink: 0 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
-                {estadoGuardado && <Typography variant="caption" color={estadoGuardado.includes('Error') ? 'error' : 'textSecondary'} sx={{ fontStyle: 'italic', fontWeight: 'bold' }}>{estadoGuardado}</Typography>}
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Tooltip title={esVistaProyecto ? "Eliminar Proyecto Permanentemente" : "Archivar Verificación"}>
-                  <IconButton color="error" onClick={handleEliminarOArchivar}>
-                    <DeleteIcon />
-                  </IconButton>
-                </Tooltip>
-                <IconButton onClick={cerrarFicha}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
-              </Box>
-            </DialogTitle>
-            <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
-              <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', px: '3rem', backgroundColor: '#fff', minHeight: 0 }}>
-                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px', mt: 1 }}>Información del Cliente y Ubicación</Typography><Box sx={{ pl: 1 }}>
-                  {esVistaProyecto && <FilaEditable etiqueta="Título del Proyecto"><TextField fullWidth size="small" variant="standard" name="tituloProyecto" value={datosGC.tituloProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('tituloProyecto', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#8b5cf6', fontSize: '1rem' } }} /></FilaEditable>}
-                  {esVistaProyecto ? <FilaEditable etiqueta="Empresa Encargada"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{EMPRESAS_ENCARGADAS.map(empresa => (<Chip key={empresa} label={empresa} onClick={() => verificarYGuardarCampo('empresaEncargada', empresa)} color={datosGC.empresaEncargada === empresa ? "primary" : "default"} variant={datosGC.empresaEncargada === empresa ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.empresaEncargada === empresa ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable> : <FilaDato etiqueta="Empresa Encargada" valor="UVIE Proeléctrica" colorValor="primary" />}
-                  <FilaEditable etiqueta="Cliente / Solicitante"><TextField fullWidth size="small" variant="standard" name="empresa_solicitante" value={datosGC.empresa_solicitante} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('empresa_solicitante', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#0ea5e9', fontSize: '0.875rem' } }} /></FilaEditable>
-                  {!esVistaProyecto && <FilaDato etiqueta="Identificador (VBA)" valor={proyectoSeleccionado.identificador_solicitud} colorValor="primary" />}
-                  <FilaEditable etiqueta="Provincia / Cantón"><Box sx={{ display: 'flex', gap: 1 }}><TextField select fullWidth size="small" name="provincia" value={datosGC.provincia} onChange={(e) => verificarYGuardarCampo('provincia', e.target.value)} sx={comunInputSx}><MenuItem value="" sx={comunMenuSx}><em>Ninguno</em></MenuItem>{PROVINCIAS.map(prov => <MenuItem key={prov} value={prov} sx={comunMenuSx}>{prov}</MenuItem>)}</TextField><TextField fullWidth size="small" name="canton" placeholder="Cantón" value={datosGC.canton} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('canton', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></Box></FilaEditable>
-                  <FilaEditable etiqueta="Distrito"><TextField fullWidth size="small" name="distrito" value={datosGC.distrito} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('distrito', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                  <FilaEditable etiqueta="Dirección Exacta"><TextField fullWidth size="small" name="exacta" value={datosGC.exacta} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('exacta', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                </Box></Box>
+      {/* MODAL PRINCIPAL: EXPEDIENTE AISLADO */}
+      <ExpedienteModal
+        modalAbierto={modalAbierto} cerrarFicha={cerrarFicha} proyectoSeleccionado={proyectoSeleccionado} esVistaProyecto={esVistaProyecto} estadoGuardado={estadoGuardado} handleEliminarOArchivar={handleEliminarOArchivar} datosGC={datosGC} handleTeclado={handleTeclado} verificarYGuardarCampo={verificarYGuardarCampo} archivos={archivos} eliminarArchivo={eliminarArchivo} abrirGoogleDrivePicker={abrirGoogleDrivePicker} tabDerecha={tabDerecha} setTabDerecha={setTabDerecha} setTareasExpandidas={setTareasExpandidas} setBitacoraExpandida={setBitacoraExpandida} datosNuevaTarea={datosNuevaTarea} setDatosNuevaTarea={setDatosNuevaTarea} handleCrearTarea={handleCrearTarea} creandoTarea={creandoTarea} tareasProyecto={tareasProyecto} abrirEdicionTarea={abrirEdicionTarea} handleCompletarTarea={handleCompletarTarea} bitacora={bitacora} chatEndRef={chatEndRef} nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario} agregarComentario={agregarComentario} inspectorOpciones={inspectorOpciones} colabOpciones={colabOpciones}
+      />
 
-                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px' }}>Detalles Técnicos</Typography><Box sx={{ pl: 1 }}>
-                  <FilaEditable etiqueta="Actividad"><TextField fullWidth size="small" name="actividad" value={datosGC.actividad} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('actividad', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                  {!esVistaProyecto && <FilaEditable etiqueta="Permisos (Cantidad)"><TextField fullWidth size="small" name="cantidad_permisos" value={datosGC.cantidad_permisos} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('cantidad_permisos', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>}
-                  <FilaEditable etiqueta="Área (m²)"><TextField fullWidth size="small" name="area_m2" value={datosGC.area_m2} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('area_m2', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                  <FilaEditable etiqueta="Contacto (Nombre)"><TextField fullWidth size="small" name="contactoNombre" value={datosGC.contactoNombre} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('contactoNombre', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                  <FilaEditable etiqueta="Contacto (Teléfono)"><TextField fullWidth size="small" name="contactoTelefono" value={datosGC.contactoTelefono} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('contactoTelefono', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                  <FilaEditable etiqueta="Contacto (Email)"><TextField fullWidth size="small" name="correo_solicitante" value={datosGC.correo_solicitante} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('correo_solicitante', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable>
-                  {!esVistaProyecto && <><FilaEditable etiqueta="Propietario (Nombre)"><TextField fullWidth size="small" name="propietarioNombre" value={datosGC.propietarioNombre} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('propietarioNombre', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable><FilaEditable etiqueta="Propietario (Cédula)"><TextField fullWidth size="small" name="propietarioCedula" value={datosGC.propietarioCedula} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('propietarioCedula', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} sx={comunInputSx} /></FilaEditable></>}
-                  {esVistaProyecto && <><FilaEditable etiqueta="Resultados del Proyecto"><TextField fullWidth multiline rows={4} size="small" name="resultadosProyecto" value={datosGC.resultadosProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('resultadosProyecto', e.target.value)} placeholder="Resultados esperados..." sx={comunInputSx} /></FilaEditable><FilaEditable etiqueta="Talento Requerido"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{TALENTO_OPCIONES.map(talento => { const isSelected = Array.isArray(datosGC.talentoRequerido) && datosGC.talentoRequerido.includes(talento); return (<Chip key={talento} label={talento} onClick={() => { const current = Array.isArray(datosGC.talentoRequerido) ? datosGC.talentoRequerido : []; const newValue = isSelected ? current.filter(t => t !== talento) : [...current, talento]; verificarYGuardarCampo('talentoRequerido', newValue); }} color={isSelected ? "primary" : "default"} variant={isSelected ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: isSelected ? 'bold' : 'normal', cursor: 'pointer' }} />); })}</Box></FilaEditable><FilaEditable etiqueta="Otro Talento Requerido"><TextField fullWidth size="small" name="otroTalento" value={datosGC.otroTalento} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('otroTalento', e.target.value)} placeholder="Subcontratos y otros" sx={comunInputSx} /></FilaEditable></>}
-                </Box></Box>
-
-                <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, mt: 3, letterSpacing: '0.5px' }}>Gestión Operativa</Typography><Box sx={{ pl: 1 }}>
-                  {!esVistaProyecto && <FilaEditable etiqueta="Fecha de Solicitud"><TextField fullWidth type="date" size="small" name="fechaSolicitud" value={datosGC.fechaSolicitud} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaSolicitud', e.target.value)} sx={comunInputSx} /></FilaEditable>}
-                  <FilaEditable etiqueta="Status"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{(esVistaProyecto ? ESTADOS_PROYECTO : ESTADOS_VERIFICACION).map(est => (<Chip key={est} label={est} onClick={() => verificarYGuardarCampo('estado', est)} color={datosGC.estado === est ? "primary" : "default"} variant={datosGC.estado === est ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.estado === est ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable>
-                  <FilaEditable etiqueta="Monto Cotizado"><Box sx={{ display: 'flex', gap: 1, width: '100%' }}><TextField select size="small" name="monedaCotizacion" value={datosGC.monedaCotizacion} onChange={(e) => verificarYGuardarCampo('monedaCotizacion', e.target.value)} sx={{ width: '100px', ...comunInputSx }}><MenuItem value="CRC" sx={comunMenuSx}>CRC</MenuItem><MenuItem value="USD" sx={comunMenuSx}>USD</MenuItem></TextField><TextField fullWidth size="small" name="montoCotizado" value={datosGC.montoCotizado} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('montoCotizado', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} placeholder="Monto total" sx={comunInputSx} /></Box></FilaEditable>
-                  {esVistaProyecto ? <><FilaEditable etiqueta="Presupuesto de Gastos"><Box sx={{ display: 'flex', gap: 1, width: '100%' }}><TextField select size="small" name="monedaPresupuesto" value={datosGC.monedaPresupuesto} onChange={(e) => verificarYGuardarCampo('monedaPresupuesto', e.target.value)} sx={{ width: '100px', ...comunInputSx }}><MenuItem value="CRC" sx={comunMenuSx}>CRC</MenuItem><MenuItem value="USD" sx={comunMenuSx}>USD</MenuItem></TextField><TextField fullWidth size="small" name="presupuestoGastos" value={datosGC.presupuestoGastos} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('presupuestoGastos', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} placeholder="Monto total" sx={comunInputSx} /></Box></FilaEditable><FilaEditable etiqueta="Estado de Pago"><TextField select fullWidth size="small" name="pago" value={datosGC.pago} onChange={(e) => verificarYGuardarCampo('pago', e.target.value)} sx={comunInputSx}>{OPCIONES_PAGO.map(opt => <MenuItem key={opt} value={opt} sx={comunMenuSx}>{opt}</MenuItem>)}</TextField></FilaEditable><FilaEditable etiqueta="Salud del Proyecto"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{SALUD_OPCIONES.map(salud => (<Chip key={salud} label={salud} onClick={() => verificarYGuardarCampo('saludProyecto', salud)} color={datosGC.saludProyecto === salud ? "primary" : "default"} variant={datosGC.saludProyecto === salud ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.saludProyecto === salud ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Progreso del Proyecto"><Box sx={{ display: 'flex', alignItems: 'center', gap: 3, width: '100%', px: 1 }}><Tooltip title={esProgresoBloqueado ? "Bloqueado en esta etapa" : ""} placement="top"><Slider disabled={esProgresoBloqueado} value={Number(datosGC.progreso) || 0} onChange={(e, val) => setDatosGC({ ...datosGC, progreso: val })} onChangeCommitted={(e, val) => verificarYGuardarCampo('progreso', val)} valueLabelDisplay="auto" step={5} marks min={0} max={100} sx={{ color: esProgresoBloqueado ? 'text.disabled' : 'primary.main' }} /></Tooltip><Typography variant="body2" fontWeight="bold" sx={{ minWidth: '40px', color: esProgresoBloqueado ? 'text.disabled' : 'inherit' }}>{datosGC.progreso || 0}%</Typography></Box></FilaEditable><FilaEditable etiqueta="Administrador"><TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)} sx={comunInputSx}><MenuItem value="" sx={comunMenuSx}><em>Sin Asignar</em></MenuItem>{inspectorOpciones.map(nombre => <MenuItem key={nombre} value={nombre} sx={comunMenuSx}>{nombre}</MenuItem>)}</TextField></FilaEditable>
-                    <FilaEditable etiqueta="Colaboradores">
-                      <Autocomplete
-                        multiple
-                        freeSolo
-                        options={colabOpciones}
-                        value={Array.isArray(datosGC.colaboradores) ? datosGC.colaboradores : []}
-                        onChange={(event, newValue) => verificarYGuardarCampo('colaboradores', newValue)}
-                        renderInput={(params) => (
-                          <TextField {...params} size="small" placeholder="Añadir colaborador..." sx={comunInputSx} />
-                        )}
-                        sx={{ width: '100%' }}
-                      />
-                    </FilaEditable>
-                    <FilaEditable etiqueta="Fechas (Inicio - Fin)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></> : <><FilaEditable etiqueta="Cancelación del pago"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{OPCIONES_SINO.map(opt => (<Chip key={opt} label={opt} onClick={() => verificarYGuardarCampo('cancelacionPago', opt)} color={datosGC.cancelacionPago === opt ? "primary" : "default"} variant={datosGC.cancelacionPago === opt ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.cancelacionPago === opt ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Seguimiento"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{SEGUIMIENTO_VERIFICACION.map(seg => (<Chip key={seg} label={seg} onClick={() => verificarYGuardarCampo('seguimiento', seg)} color={datosGC.seguimiento === seg ? "primary" : "default"} variant={datosGC.seguimiento === seg ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.seguimiento === seg ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable><FilaEditable etiqueta="Inspector Asignado"><TextField select fullWidth size="small" name="inspector" value={datosGC.inspector} onChange={(e) => verificarYGuardarCampo('inspector', e.target.value)} sx={comunInputSx}><MenuItem value="" sx={comunMenuSx}><em>Sin Asignar</em></MenuItem>{inspectorOpciones.map(nombre => <MenuItem key={nombre} value={nombre} sx={comunMenuSx}>{nombre}</MenuItem>)}</TextField></FilaEditable>
-                    <FilaEditable etiqueta="Fechas (Insp. - Entrega)"><Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}><TextField fullWidth type="date" size="small" name="fechaInicio" value={datosGC.fechaInicio} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaInicio', e.target.value)} sx={comunInputSx} /><Typography>-</Typography><TextField fullWidth type="date" size="small" name="fechaFin" value={datosGC.fechaFin} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('fechaFin', e.target.value)} sx={comunInputSx} /></Box></FilaEditable></>}
-                  <FilaEditable etiqueta="Archivos (Drive)"><Box sx={{ width: '100%' }}>{archivos.map((archivo, i) => (<Box key={archivo.id || archivo.url || i} sx={{ display: 'flex', alignItems: 'center', p: 1, border: '1px solid #e2e8f0', borderRadius: '4px', mb: 1 }}><InsertDriveFileIcon color="primary" sx={{ mr: 1 }} /><Typography variant="body2" sx={{ flexGrow: 1, cursor: 'pointer', textDecoration: 'underline', color: '#0ea5e9' }} onClick={() => window.open(archivo.url, '_blank')}>{archivo.nombre}</Typography><IconButton size="small" color="error" onClick={() => eliminarArchivo(archivo)}><DeleteIcon fontSize="small" /></IconButton></Box>))}<Button variant="outlined" onClick={abrirGoogleDrivePicker} startIcon={<AttachFileIcon />} sx={{ textTransform: 'none', borderRadius: '20px', mt: 1, color: '#00838f', borderColor: '#00838f' }}>Adjuntar desde Google Drive</Button></Box></FilaEditable>
-                </Box></Box>
-              </Box>
-
-              {/* COLUMNA DERECHA: PESTAÑAS Y CONTENIDO (TAREAS Y BITÁCORA) */}
-              <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <Tabs value={tabDerecha} onChange={(e, val) => setTabDerecha(val)} variant="fullWidth" sx={{ minHeight: '48px', borderBottom: '1px solid #e2e8f0', bgcolor: '#fff' }}>
-                  <Tab label="Bitácora y Actividad" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 0 ? '#8b5cf6 !important' : 'text.secondary' }} />
-                  <Tab label="Tareas del Proyecto" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 1 ? '#0ea5e9 !important' : 'text.secondary' }} />
-                </Tabs>
-
-                {/* CONTENIDO PESTAÑA 1: TAREAS */}
-                {tabDerecha === 1 && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
-                    <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestión de Tareas</Typography>
-                      <Tooltip title="Expandir Tareas">
-                        <IconButton size="small" onClick={() => setTareasExpandidas(true)} sx={{ color: '#0ea5e9', padding: 0.5 }}>
-                          <OpenInFullIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                    <Box sx={{ py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
-                      <TextField fullWidth size="small" label="Describir tarea o inspección..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ mb: 1, ...comunInputSx }} />
-                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                        <TextField select fullWidth size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={comunInputSx}>
-                          {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo} sx={comunMenuSx}>{miembro.nombre}</MenuItem>)}
-                        </TextField>
-                        <TextField fullWidth type="date" size="small" value={datosNuevaTarea.fecha_limite} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, fecha_limite: e.target.value })} sx={comunInputSx} />
-                      </Box>
-                      <Button fullWidth variant="contained" size="small" onClick={handleCrearTarea} disabled={creandoTarea} sx={{ textTransform: 'none' }}>
-                        {creandoTarea ? 'Guardando...' : 'Asignar Tarea'}
-                      </Button>
-                    </Box>
-
-                    <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
-                      {tareasProyecto.length === 0 ? (
-                        <Typography variant="body2" color="textSecondary" align="center" sx={{ mt: 2 }}>No hay tareas asignadas a este proyecto.</Typography>
-                      ) : (
-                        <List disablePadding>
-                          {tareasProyecto.map(t => (
-                            <ListItem key={t.id} sx={{ px: 0, mb: 0.5, py: 0, opacity: t.estado === 'Completada' ? 0.6 : 1 }}>
-                              <ListItemText
-                                primary={<Typography variant="body2" fontWeight="bold" sx={{ textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
-                                secondaryTypographyProps={{ component: 'div' }}
-                                secondary={<Typography component="div" variant="caption" color="textSecondary">{t.asignado_a.split('@')[0]} | {t.fecha_limite}</Typography>}
-                              />
-                              {t.estado === 'Pendiente' && (
-                                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                                  <Tooltip title="Editar Tarea">
-                                    <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(t)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
-                                  </Tooltip>
-                                  <Tooltip title="Marcar como Completada">
-                                    <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5, px: 1, textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
-                                  </Tooltip>
-                                </Box>
-                              )}
-                            </ListItem>
-                          ))}
-                        </List>
-                      )}
-                    </Box>
-                  </Box>
-                )}
-
-                {/* CONTENIDO PESTAÑA 0: BITÁCORA */}
-                {tabDerecha === 0 && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
-                    <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial del Expediente</Typography>
-                      <Tooltip title="Expandir Bitácora">
-                        <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#8b5cf6', padding: 0.5 }}>
-                          <OpenInFullIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                    <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
-                      <List disablePadding>
-                        {bitacora.map((comentario) => {
-                          const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
-                          return (
-                            <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 0.5, py: 0 }}>
-                              <ListItemAvatar sx={{ minWidth: '36px' }}><Avatar sx={{ width: 28, height: 28, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ fontSize: 18, color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
-                              <ListItemText
-                                primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{comentario.fecha}</Typography></Box>}
-                                secondaryTypographyProps={{ component: 'div' }}
-                                secondary={<Typography component="div" variant="body2" sx={{ mt: 0.25, color: esSistema ? '#6b7280' : '#111827', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', py: esSistema ? 0 : 0.5, px: esSistema ? 0 : 1, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', wordBreak: 'break-word' }}>{comentario.texto}</Typography>}
-                              />
-                            </ListItem>
-                          );
-                        })}
-                        <div ref={chatEndRef} />
-                      </List>
-                    </Box>
-                    <Box sx={{ flexShrink: 0, p: 2, backgroundColor: '#fff', borderTop: '1px solid #e2e8f0' }}>
-                      <TextField fullWidth multiline maxRows={3} size="small" placeholder="Añade un comentario..." value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)} onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} sx={{ backgroundColor: '#fff', mb: 1, ...comunInputSx }} />
-                      <Button fullWidth variant="contained" endIcon={<SendIcon />} size="small" onClick={agregarComentario} sx={{ textTransform: 'none', borderRadius: '4px' }}>Comentar</Button>
-                    </Box>
-                  </Box>
-                )}
-              </Box>
-            </DialogContent>
-          </>
-        )}
-      </Dialog>
-
-      {/* MODAL DE EDICIÓN DE TAREAS */}
+      {/* MODALES SECUNDARIOS Y SNACKBAR GLOBAL */}
       <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b', py: 1 }}>Editar Tarea</DialogTitle>
         <DialogContent dividers sx={{ py: 1 }}>
@@ -810,7 +517,6 @@ function App() {
         </Box>
       </Dialog>
 
-      {/* MODAL DE BITÁCORA EXPANDIDA */}
       <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
         <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8b5cf6' }}>Bitácora Completa del Expediente</Typography>
@@ -836,7 +542,6 @@ function App() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DE TAREAS EXPANDIDAS */}
       <Dialog open={tareasExpandidas} onClose={() => setTareasExpandidas(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
         <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#0ea5e9' }}>Panel Completo de Tareas</Typography>
@@ -896,7 +601,6 @@ function App() {
         </DialogContent>
       </Dialog>
 
-      {/* SNACKBAR GLOBAL */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', fontWeight: 'bold' }}>
           {snackbar.message}
