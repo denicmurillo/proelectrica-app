@@ -112,22 +112,22 @@ class ActualizacionVBA(BaseModel):
 class GestionGC(BaseModel):
     titulo_proyecto: Optional[str] = ""
     empresa_encargada: Optional[str] = "Proeléctrica"
-    empresa_solicitante: str
+    empresa_solicitante: Optional[str] = ""
     correo_solicitante: Optional[str] = ""
-    estado: str
-    seguimiento: str
-    monto_cotizado: str
-    pago: str
-    inspector: str
+    estado: Optional[str] = "Nueva Solicitud"
+    seguimiento: Optional[str] = ""
+    monto_cotizado: Optional[str] = ""
+    pago: Optional[str] = "Pendiente"
+    inspector: Optional[str] = ""
     fecha_programacion: Optional[str] = ""
     fecha_inicio: Optional[str] = ""
     fecha_fin: Optional[str] = ""
     presupuesto_gastos: Optional[str] = ""
     salud_proyecto: Optional[str] = "Saludable"
     progreso: Optional[int] = 0
-    bitacora: List[dict]
-    archivos: List[dict] = []
-    datos_dinamicos: dict
+    bitacora: Optional[List[dict]] = []
+    archivos: Optional[List[dict]] = []
+    datos_dinamicos: Optional[dict] = {}
 
 class TareaCrear(BaseModel):
     descripcion: str
@@ -267,9 +267,14 @@ async def actualizar_gestion_gc(id_proyecto: int, payload: GestionGC, db: Sessio
         proyecto.bitacora = payload.bitacora
         proyecto.archivos = payload.archivos
         proyecto.datos_dinamicos = payload.datos_dinamicos
+        flag_modified(proyecto, "datos_dinamicos")
+        flag_modified(proyecto, "bitacora")
+        flag_modified(proyecto, "archivos")
         db.commit()
-        return {"status": "success"}
+        db.refresh(proyecto)
+        return {"status": "success", "proyecto": proyecto}
     except Exception as e:
+        logger.error(f"❌ Error al actualizar gestión: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 

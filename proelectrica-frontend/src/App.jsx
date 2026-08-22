@@ -246,7 +246,13 @@ function App() {
     setArchivos(proyecto.archivos || []); setModalAbierto(true);
   };
 
-  const cerrarFicha = () => { setModalAbierto(false); setProyectoSeleccionado(null); };
+  const cerrarFicha = () => {
+    if (proyectoSeleccionado && JSON.stringify(datosGC) !== JSON.stringify(datosGuardados)) {
+      autoguardarEnBackend(datosGC, bitacora, archivos, proyectoSeleccionado);
+    }
+    setModalAbierto(false);
+    setProyectoSeleccionado(null);
+  };
 
   const handleEliminarOArchivar = async () => {
     const esProy = proyectoSeleccionado && isProyectoApp(proyectoSeleccionado);
@@ -271,27 +277,75 @@ function App() {
   };
 
   const autoguardarEnBackend = async (nuevosDatosGC, nuevaBitacora, nuevosArchivos, proyectoBase) => {
+    if (!proyectoBase || !proyectoBase.id) return;
     setEstadoGuardado('Guardando...');
     try {
       const datosDinamicosActualizados = {
-        ...proyectoBase.datos_dinamicos, seguimiento_inspeccion: nuevosDatosGC.seguimiento, fecha_solicitud: nuevosDatosGC.fechaSolicitud, cancelacion_pago: nuevosDatosGC.cancelacionPago, moneda_presupuesto: nuevosDatosGC.monedaPresupuesto, moneda_cotizacion: nuevosDatosGC.monedaCotizacion, resultados_proyecto: nuevosDatosGC.resultadosProyecto, talento_requerido: nuevosDatosGC.talentoRequerido, otro_talento: nuevosDatosGC.otroTalento, colaboradores: nuevosDatosGC.colaboradores,
-        ubicacion: { ...proyectoBase.datos_dinamicos?.ubicacion, provincia: nuevosDatosGC.provincia, canton: nuevosDatosGC.canton, distrito: nuevosDatosGC.distrito, exacta: nuevosDatosGC.exacta },
-        detalles_tecnicos: { ...proyectoBase.datos_dinamicos?.detalles_tecnicos, actividad: nuevosDatosGC.actividad, cantidad_permisos: nuevosDatosGC.cantidad_permisos, area_m2: nuevosDatosGC.area_m2 },
-        contacto: { ...proyectoBase.datos_dinamicos?.contacto, nombre: nuevosDatosGC.contactoNombre, telefono: nuevosDatosGC.contactoTelefono },
-        propietario: { ...proyectoBase.datos_dinamicos?.propietario, nombre: nuevosDatosGC.propietarioNombre, cedula: nuevosDatosGC.propietarioCedula }
+        ...(proyectoBase.datos_dinamicos || {}),
+        seguimiento_inspeccion: nuevosDatosGC.seguimiento,
+        fecha_solicitud: nuevosDatosGC.fechaSolicitud,
+        cancelacion_pago: nuevosDatosGC.cancelacionPago,
+        moneda_presupuesto: nuevosDatosGC.monedaPresupuesto,
+        moneda_cotizacion: nuevosDatosGC.monedaCotizacion,
+        resultados_proyecto: nuevosDatosGC.resultadosProyecto,
+        talento_requerido: nuevosDatosGC.talentoRequerido,
+        otro_talento: nuevosDatosGC.otroTalento,
+        colaboradores: nuevosDatosGC.colaboradores,
+        ubicacion: { ...(proyectoBase.datos_dinamicos?.ubicacion || {}), provincia: nuevosDatosGC.provincia, canton: nuevosDatosGC.canton, distrito: nuevosDatosGC.distrito, exacta: nuevosDatosGC.exacta },
+        detalles_tecnicos: { ...(proyectoBase.datos_dinamicos?.detalles_tecnicos || {}), actividad: nuevosDatosGC.actividad, cantidad_permisos: nuevosDatosGC.cantidad_permisos, area_m2: nuevosDatosGC.area_m2 },
+        contacto: { ...(proyectoBase.datos_dinamicos?.contacto || {}), nombre: nuevosDatosGC.contactoNombre, telefono: nuevosDatosGC.contactoTelefono },
+        propietario: { ...(proyectoBase.datos_dinamicos?.propietario || {}), nombre: nuevosDatosGC.propietarioNombre, cedula: nuevosDatosGC.propietarioCedula }
       };
       const payload = {
-        titulo_proyecto: nuevosDatosGC.tituloProyecto, empresa_encargada: nuevosDatosGC.empresaEncargada, empresa_solicitante: nuevosDatosGC.empresa_solicitante, correo_solicitante: nuevosDatosGC.correo_solicitante, estado: nuevosDatosGC.estado, seguimiento: nuevosDatosGC.seguimiento, monto_cotizado: nuevosDatosGC.montoCotizado, pago: nuevosDatosGC.pago, inspector: nuevosDatosGC.inspector, fecha_programacion: nuevosDatosGC.fechaProgramacion, fecha_inicio: nuevosDatosGC.fechaInicio, fecha_fin: nuevosDatosGC.fechaFin, progreso: nuevosDatosGC.progreso, presupuesto_gastos: nuevosDatosGC.presupuestoGastos, salud_proyecto: nuevosDatosGC.saludProyecto, bitacora: nuevaBitacora, archivos: nuevosArchivos, datos_dinamicos: datosDinamicosActualizados
+        titulo_proyecto: nuevosDatosGC.tituloProyecto,
+        empresa_encargada: nuevosDatosGC.empresaEncargada,
+        empresa_solicitante: nuevosDatosGC.empresa_solicitante,
+        correo_solicitante: nuevosDatosGC.correo_solicitante,
+        estado: nuevosDatosGC.estado,
+        seguimiento: nuevosDatosGC.seguimiento,
+        monto_cotizado: nuevosDatosGC.montoCotizado,
+        pago: nuevosDatosGC.pago,
+        inspector: nuevosDatosGC.inspector,
+        fecha_programacion: nuevosDatosGC.fechaProgramacion,
+        fecha_inicio: nuevosDatosGC.fechaInicio,
+        fecha_fin: nuevosDatosGC.fechaFin,
+        progreso: Number(nuevosDatosGC.progreso) || 0,
+        presupuesto_gastos: nuevosDatosGC.presupuestoGastos,
+        salud_proyecto: nuevosDatosGC.saludProyecto,
+        bitacora: nuevaBitacora,
+        archivos: nuevosArchivos,
+        datos_dinamicos: datosDinamicosActualizados
       };
-      await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
-      setEstadoGuardado('Guardado'); setTimeout(() => setEstadoGuardado(''), 2000);
-    } catch (error) { setEstadoGuardado('Error al guardar'); mostrarMensaje("Hubo un error de conexión al autoguardar.", "error"); }
+      const res = await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
+      
+      const proyectoActualizado = {
+        ...proyectoBase,
+        ...payload,
+        datos_dinamicos: datosDinamicosActualizados,
+        ...(res.data?.proyecto || {})
+      };
+      setProyectoSeleccionado(proyectoActualizado);
+      setProyectos(prevProyectos => prevProyectos.map(p => p.id === proyectoBase.id ? proyectoActualizado : p));
+
+      setEstadoGuardado('Guardado');
+      setTimeout(() => setEstadoGuardado(''), 2000);
+    } catch (error) {
+      console.error("Error al autoguardar:", error);
+      setEstadoGuardado('Error al guardar');
+      mostrarMensaje("Hubo un error de conexión al autoguardar.", "error");
+    }
   };
 
   const verificarYGuardarCampo = (campo, valorNuevo) => {
+    if (!proyectoSeleccionado) return;
     if (JSON.stringify(datosGuardados[campo]) === JSON.stringify(valorNuevo)) return;
+    
     let progresoAjustado = datosGC.progreso;
-    if (campo === 'estado' && ESTADOS_PROGRESO_BLOQUEADO.includes(valorNuevo)) progresoAjustado = 0;
+    if (campo === 'progreso') {
+      progresoAjustado = Number(valorNuevo) || 0;
+    } else if (campo === 'estado' && ESTADOS_PROGRESO_BLOQUEADO.includes(valorNuevo)) {
+      progresoAjustado = 0;
+    }
 
     const nombresLegibles = { tituloProyecto: "Título del Proyecto", empresaEncargada: "Empresa Encargada", empresa_solicitante: "Cliente / Solicitante", correo_solicitante: "Contacto (Email)", estado: "Estado (Status)", seguimiento: "Seguimiento", montoCotizado: "Monto Cotizado", pago: "Estado de Pago", cancelacionPago: "Cancelación del pago", inspector: "Administrador / Inspector", colaboradores: "Colaboradores", fechaInicio: "Fecha Inicial", fechaFin: "Fecha Final", fechaSolicitud: "Fecha de Solicitud", progreso: "Progreso (%)", provincia: "Provincia", canton: "Cantón", distrito: "Distrito", exacta: "Dirección Exacta", actividad: "Actividad", cantidad_permisos: "Cantidad de Permisos", area_m2: "Área (m²)", contactoNombre: "Nombre Contacto", contactoTelefono: "Teléfono Contacto", propietarioNombre: "Nombre Propietario", propietarioCedula: "Cédula Propietario", presupuestoGastos: "Presupuesto de Gastos", monedaPresupuesto: "Moneda de Presupuesto", monedaCotizacion: "Moneda de Cotización", resultadosProyecto: "Resultados del Proyecto", talentoRequerido: "Talento Requerido", otroTalento: "Otro Talento", saludProyecto: "Salud del Proyecto" };
 
@@ -303,7 +357,9 @@ function App() {
     const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString() }];
     const nuevosDatosGC = { ...datosGC, [campo]: valorNuevo, progreso: progresoAjustado };
 
-    setBitacora(nuevaBitacora); setDatosGC(nuevosDatosGC); setDatosGuardados(nuevosDatosGC);
+    setBitacora(nuevaBitacora);
+    setDatosGC(nuevosDatosGC);
+    setDatosGuardados(nuevosDatosGC);
     autoguardarEnBackend(nuevosDatosGC, nuevaBitacora, archivos, proyectoSeleccionado);
   };
 
