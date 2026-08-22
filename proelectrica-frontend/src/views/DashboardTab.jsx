@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
     Box, Typography, TextField, MenuItem, Card, CardContent, Paper,
-    Button, Chip, ToggleButton, ToggleButtonGroup
+    Button, Chip, ToggleButton, ToggleButtonGroup, List, ListItem, ListItemText, Tooltip
 } from '@mui/material';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
@@ -9,6 +9,9 @@ import FactCheckIcon from '@mui/icons-material/FactCheck';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import EditDocumentIcon from '@mui/icons-material/EditDocument';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import EditIcon from '@mui/icons-material/Edit';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 
@@ -17,6 +20,14 @@ const comunInputSx = { '& .MuiInputBase-root': { fontSize: '0.875rem' } };
 const comunMenuSx = { fontSize: '0.875rem' };
 const EMPRESAS_ENCARGADAS = ["Proeléctrica", "Edificaciones", "Investigaciones"];
 const COLORES_GRAFICOS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#f43f5e', '#64748b'];
+
+const EQUIPO_PROELECTRICA = [
+    { nombre: "Denic Murillo Murillo", correo: "dmurillo@proelectrica.net" },
+    { nombre: "Andrey Castro Herrera", correo: "acastro@proelectrica.net" },
+    { nombre: "Seidy Ortega Pérez", correo: "sortega@proelectrica.net" },
+    { nombre: "Jeffry Molina Aguilar", correo: "jmolina@proelectrica.net" },
+    { nombre: "Allan Gómez Chavarría", correo: "agomez@proelectrica.net" }
+];
 
 const currentYear = new Date().getFullYear();
 const defaultStartDate = `${currentYear}-01-01`;
@@ -33,10 +44,13 @@ const getFechaOrdenamiento = (p) => {
     return p.datos_dinamicos?.fecha_solicitud || p.fecha_programacion || '1970-01-01';
 };
 
-export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha }) => {
+export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual, abrirEdicionTarea }) => {
     const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
     const [fechaFiltroInicio, setFechaFiltroInicio] = useState(defaultStartDate);
     const [fechaFiltroFin, setFechaFiltroFin] = useState(defaultEndDate);
+
+    // Estado para el filtro de la vista operativa
+    const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
     const mGerencia = useMemo(() => {
         let totalFiltrado = 0; const conteoEmpresas = {};
@@ -144,6 +158,7 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
                     <ToggleButton value="Gerencia" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>Gerencia</ToggleButton>
                     <ToggleButton value="PMO" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>PMO</ToggleButton>
                     <ToggleButton value="GC" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>Calidad (GC)</ToggleButton>
+                    <ToggleButton value="Operativo" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>Operativo</ToggleButton>
                 </ToggleButtonGroup>
             </Box>
 
@@ -270,6 +285,57 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
                     </Box>
                 </Box>
             )}
+
+            {vistaDashboard === 'Operativo' && (() => {
+                const tareasMostrar = filtroUsuarioTareas === 'Todas' ? todasLasTareas : todasLasTareas.filter(t => t.asignado_a === filtroUsuarioTareas);
+                return (
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 3 }}>
+                        <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <AssignmentIcon sx={{ color: '#0ea5e9', mr: 1 }} />
+                                    <Typography variant="h6" fontWeight="bold" color="#1e293b">Inspecciones y Tareas Activas</Typography>
+                                </Box>
+                                <TextField select size="small" value={filtroUsuarioTareas} onChange={(e) => setFiltroUsuarioTareas(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', '& .MuiInputBase-root': { fontSize: '0.875rem' } }}>
+                                    <MenuItem value="Todas">🌍 Todas las tareas globales</MenuItem>
+                                    {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo}>{miembro.nombre}</MenuItem>)}
+                                </TextField>
+                            </Box>
+
+                            {tareasMostrar.length === 0 ? (
+                                <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                                    <CheckCircleIcon sx={{ fontSize: 40, color: '#10b981', mb: 1 }} />
+                                    <Typography variant="body1" color="textSecondary">No hay tareas pendientes en este filtro.</Typography>
+                                </Box>
+                            ) : (
+                                <List sx={{ pt: 0 }}>
+                                    {tareasMostrar.map((tarea) => (
+                                        <ListItem key={tarea.id} sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', mb: 2, backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' } }}>
+                                            <ListItemText
+                                                primary={<Typography variant="subtitle1" fontWeight="bold" color="#0ea5e9" sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => abrirFicha(proyectos.find(x => x.id === tarea.id_proyecto))}>{tarea.proyecto}</Typography>}
+                                                secondaryTypographyProps={{ component: 'div' }}
+                                                secondary={
+                                                    <Box sx={{ mt: 1 }}>
+                                                        <Typography variant="body2" color="#334155" fontWeight="500">{tarea.descripcion}</Typography>
+                                                        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
+                                                            <strong>Responsable:</strong> {tarea.asignado_a.split('@')[0]} | <strong>Asignado por:</strong> {tarea.asignado_por} | <strong>Límite:</strong> {tarea.fecha_limite}
+                                                        </Typography>
+                                                    </Box>
+                                                }
+                                            />
+                                            <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', gap: 1 }}>
+                                                {tarea.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(tarea.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
+                                                <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(tarea)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
+                                                <Button variant="contained" size="small" color="success" onClick={() => completarTarea(tarea.id)} sx={{ textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
+                                            </Box>
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            )}
+                        </Paper>
+                    </Box>
+                );
+            })()}
         </Box>
     );
 };
