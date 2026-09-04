@@ -13,7 +13,6 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import EditIcon from '@mui/icons-material/Edit';
 import { PieChart } from '@mui/x-charts/PieChart';
-import { BarChart } from '@mui/x-charts/BarChart';
 
 // --- CONSTANTES LOCALES DEL DASHBOARD ---
 const comunInputSx = { '& .MuiInputBase-root': { fontSize: '0.875rem' } };
@@ -45,20 +44,64 @@ const getFechaOrdenamiento = (p) => {
 };
 
 export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas = [], completarTarea, usuarioActual, abrirEdicionTarea }) => {
+    // Filtros Gerencia
     const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
     const [fechaFiltroInicio, setFechaFiltroInicio] = useState(defaultStartDate);
     const [fechaFiltroFin, setFechaFiltroFin] = useState(defaultEndDate);
 
+    // Filtros Calidad (GC)
+    const [fechaFiltroInicioGC, setFechaFiltroInicioGC] = useState(defaultStartDate);
+    const [fechaFiltroFinGC, setFechaFiltroFinGC] = useState(defaultEndDate);
+
+    // Filtro Operativo
     const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
+    // 1. MOTOR GLOBAL DE SALUD (Ignora fechas y empresas, mira solo "Activos")
+    const mSaludGlobal = useMemo(() => {
+        let pmoSalud = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
+        let verifSalud = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
+        let pmoActivos = 0, verifActivas = 0;
+
+        // Lista estricta que define si un registro es "Activo" operativamente
+        const estadosActivos = ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"];
+
+        (proyectos || []).forEach(p => {
+            const estadoSeguro = typeof p.estado === 'string' ? p.estado : '';
+            if (!estadosActivos.includes(estadoSeguro)) return; // Ignoramos Cotizaciones y Archivados
+
+            if (isProyectoApp(p)) {
+                pmoActivos++;
+                const salud = p.salud_proyecto || 'Saludable';
+                if (pmoSalud[salud] !== undefined) pmoSalud[salud]++;
+            } else {
+                verifActivas++;
+                let saludV = "Saludable";
+
+                if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
+                    const bitacoraArr = Array.isArray(p.bitacora) ? p.bitacora : [];
+                    const logCambio = [...bitacoraArr].reverse().find(log => typeof log?.texto === 'string' && log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
+
+                    let dias = 0;
+                    if (logCambio && logCambio.id) dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
+
+                    if ((estadoSeguro === "Elaboración de informe" && dias > 10) || (estadoSeguro === "En revisión del Verificador" && dias > 2)) {
+                        saludV = "En peligro";
+                    } else if (estadoSeguro === "Elaboración de informe" && dias > 7) {
+                        saludV = "Necesita atención";
+                    }
+                }
+                if (verifSalud[saludV] !== undefined) verifSalud[saludV]++;
+            }
+        });
+
+        return { pmoSalud, verifSalud, pmoActivos, verifActivas };
+    }, [proyectos]);
+
+    // 2. MOTOR GERENCIAL (Afectado por filtros de Empresa y Fecha)
     const mGerencia = useMemo(() => {
         let totalFiltrado = 0; const conteoEmpresas = {};
         let pmoExitosos = 0, pmoPerdidos = 0;
         let verifExitosos = 0, verifPerdidos = 0;
-
-        let pmoSalud = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
-        let verifSalud = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
-        let pmoActivos = 0, verifActivas = 0;
 
         (proyectos || []).forEach(p => {
             const fechaOrden = getFechaOrdenamiento(p);
@@ -67,7 +110,6 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
 
             const empresa = !isProyectoApp(p) ? (p.empresa_encargada || "UVIE Proeléctrica") : (p.empresa_encargada || "Sin Asignar");
             const estadoSeguro = typeof p.estado === 'string' ? p.estado : '';
-            const esArchivado = estadoSeguro.toLowerCase().includes('archivado');
 
             const pasaFiltro = empresaFiltroGerencia === 'Todas' || empresa === empresaFiltroGerencia;
             if (pasaFiltro) {
@@ -77,38 +119,9 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                 if (isProyectoApp(p)) {
                     if (['Adjudicado', 'En progreso', 'Revisión por parte del cliente', 'Completado y listo para facturar', 'Facturado y pendiente de pago', 'Pago recibido y proyecto archivado'].includes(estadoSeguro)) pmoExitosos++;
                     else if (['No se ejecutó. Proyecto archivado'].includes(estadoSeguro)) pmoPerdidos++;
-
-                    if (!esArchivado && !['Cotización', 'Nueva Solicitud'].includes(estadoSeguro)) {
-                        pmoActivos++;
-                        const salud = p.salud_proyecto || 'Saludable';
-                        if (pmoSalud[salud] !== undefined) pmoSalud[salud]++;
-                    }
                 } else {
                     if (['Adjudicado y pagado', 'Asignado y programado', 'Elaboración de informe', 'En revisión del Verificador', 'Finalizado y entregado'].includes(estadoSeguro)) verifExitosos++;
                     else if (['Archivado no adjudicado'].includes(estadoSeguro)) verifPerdidos++;
-
-                    if (!esArchivado && !['Oferta Generada'].includes(estadoSeguro)) {
-                        verifActivas++;
-                        let saludV = "Saludable";
-
-                        if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
-                            // BLINDAJE: Aseguramos que bitacora sea un arreglo para que no rompa el .reverse()
-                            const bitacoraArr = Array.isArray(p.bitacora) ? p.bitacora : [];
-                            const logCambio = [...bitacoraArr].reverse().find(log => typeof log?.texto === 'string' && log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
-
-                            let dias = 0;
-                            if (logCambio && logCambio.id) dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
-
-                            if ((estadoSeguro === "Elaboración de informe" && dias > 10) || (estadoSeguro === "En revisión del Verificador" && dias > 2)) {
-                                saludV = "En peligro";
-                            } else if (estadoSeguro === "Elaboración de informe" && dias > 7) {
-                                saludV = "Necesita atención";
-                            }
-                        } else if (estadoSeguro === 'Nueva Solicitud' && !p.identificador_solicitud) {
-                            saludV = "Necesita atención";
-                        }
-                        if (verifSalud[saludV] !== undefined) verifSalud[saludV]++;
-                    }
                 }
             }
         });
@@ -119,9 +132,10 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
         const totalVerif = verifExitosos + verifPerdidos;
         const efecVerif = totalVerif > 0 ? Math.round((verifExitosos / totalVerif) * 100) : 0;
 
-        return { pieData, total: totalFiltrado, efecPMO, pmoExitosos, totalPMO, efecVerif, verifExitosos, totalVerif, pmoSalud, verifSalud, pmoActivos, verifActivas };
+        return { pieData, total: totalFiltrado, efecPMO, pmoExitosos, totalPMO, efecVerif, verifExitosos, totalVerif };
     }, [proyectos, empresaFiltroGerencia, fechaFiltroInicio, fechaFiltroFin]);
 
+    // 3. MOTOR PMO
     const mPMO = useMemo(() => {
         const pmoProyectos = (proyectos || []).filter(p => {
             const estado = typeof p.estado === 'string' ? p.estado : '';
@@ -129,19 +143,14 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
         });
 
         const saludCont = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
-        const talentoCont = {}; const proyectosCercaVencimiento = []; const proyectosEnRiesgo = [];
+        const proyectosCercaVencimiento = []; const proyectosEnRiesgo = [];
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
 
         pmoProyectos.forEach(p => {
             const salud = p.salud_proyecto || 'Saludable';
             if (saludCont[salud] !== undefined) saludCont[salud] += 1;
-
             if (salud === 'Necesita atención' || salud === 'En peligro') proyectosEnRiesgo.push({ id: p.id, titulo: p.titulo_proyecto, salud });
 
-            const talentos = p.datos_dinamicos?.talento_requerido || [];
-            if (Array.isArray(talentos)) talentos.forEach(t => { talentoCont[t] = (talentoCont[t] || 0) + 1; });
-
-            // BLINDAJE: Aseguramos que fecha_fin exista y sea string antes del split
             if (p.fecha_fin && typeof p.fecha_fin === 'string' && !["Completado y listo para facturar", "Facturado y pendiente de pago"].includes(p.estado)) {
                 const parts = p.fecha_fin.split(/[-/]/);
                 if (parts.length === 3) {
@@ -157,23 +166,20 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
 
         proyectosCercaVencimiento.sort((a, b) => a.diasFaltantes - b.diasFaltantes);
         const saludData = Object.keys(saludCont).map((key, index) => ({ id: index, label: key, value: saludCont[key], color: key === 'Saludable' ? '#10b981' : key === 'Necesita atención' ? '#f59e0b' : '#f43f5e' })).filter(d => d.value > 0);
-        const talentoData = Object.keys(talentoCont).map(key => ({ name: key, value: talentoCont[key] })).filter(d => d.value > 0).sort((a, b) => b.value - a.value).slice(0, 5);
-        return { saludData, talentoData, proyectosCercaVencimiento, proyectosEnRiesgo, totalActivos: pmoProyectos.length };
+        return { saludData, proyectosCercaVencimiento, proyectosEnRiesgo };
     }, [proyectos]);
 
+    // 4. MOTOR CALIDAD (GC)
     const mGC = useMemo(() => {
         const verifProyectos = (proyectos || []).filter(p => !isProyectoApp(p));
-        const estadosCont = {}; const seguimientoCont = { "Primera inspección": 0, "Reinspección": 0 };
+        const seguimientoCont = { "Primera inspección": 0, "Reinspección": 0 };
         let alertasVBA = 0; const informesPendientes = []; const alertasSLA = [];
         const estadosFlujoCalidad = ["Adjudicado y pagado", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador"];
 
         verifProyectos.forEach(p => {
             const estadoSeguro = p.estado || 'Sin Estado';
-            estadosCont[estadoSeguro] = (estadosCont[estadoSeguro] || 0) + 1;
 
-            if (p.datos_dinamicos?.seguimiento_inspeccion) {
-                seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
-            }
+            // Alertas (NO AFECTADAS POR FILTRO DE FECHAS)
             if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) alertasVBA += 1;
             if (estadosFlujoCalidad.includes(estadoSeguro)) informesPendientes.push({ id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro });
 
@@ -186,12 +192,23 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                 if (estadoSeguro === "Elaboración de informe" && dias > 10) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
                 else if (estadoSeguro === "En revisión del Verificador" && dias > 2) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
             }
+
+            // Métricas Gráficas (SÍ AFECTADAS POR FILTRO DE FECHAS)
+            const fechaOrden = getFechaOrdenamiento(p);
+            let entraEnRango = true;
+            if (fechaFiltroInicioGC && fechaOrden < fechaFiltroInicioGC) entraEnRango = false;
+            if (fechaFiltroFinGC && fechaOrden > fechaFiltroFinGC) entraEnRango = false;
+
+            if (entraEnRango) {
+                if (p.datos_dinamicos?.seguimiento_inspeccion) {
+                    seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
+                }
+            }
         });
 
-        const estadosData = Object.keys(estadosCont).map(key => ({ name: key, value: estadosCont[key] })).filter(d => d.value > 0).sort((a, b) => a.value - b.value);
         const segData = Object.keys(seguimientoCont).map((key, index) => ({ id: index, label: key, value: seguimientoCont[key], color: key === 'Reinspección' ? '#f43f5e' : '#0ea5e9' })).filter(d => d.value > 0);
-        return { estadosData, segData, informesPendientes, alertasVBA, alertasSLA };
-    }, [proyectos]);
+        return { segData, informesPendientes, alertasVBA, alertasSLA };
+    }, [proyectos, fechaFiltroInicioGC, fechaFiltroFinGC]);
 
     return (
         <Box sx={{ p: { xs: 2, md: 4 }, flexGrow: 1 }}>
@@ -205,9 +222,38 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                 </ToggleButtonGroup>
             </Box>
 
+            {/* ========================================================================= */}
+            {/* VISTA GERENCIA */}
+            {/* ========================================================================= */}
             {vistaDashboard === 'Gerencia' && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+
+                    {/* Tarjetas de Salud Global (SIN FILTROS) */}
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+                        <Card elevation={1} sx={{ borderRadius: '12px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle2" fontWeight="bold" color="#1e293b" mb={2}>Salud Portafolio: Proyectos ({mSaludGlobal.pmoActivos} Activos)</Typography>
+                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                    <Chip label={`${mSaludGlobal.pmoSalud['Saludable'] || 0} Saludables`} sx={{ bgcolor: '#dcfce7', color: '#166534', fontWeight: 'bold' }} />
+                                    <Chip label={`${mSaludGlobal.pmoSalud['Necesita atención'] || 0} En Atención`} sx={{ bgcolor: '#fef3c7', color: '#b45309', fontWeight: 'bold' }} />
+                                    <Chip label={`${mSaludGlobal.pmoSalud['En peligro'] || 0} En Peligro`} sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold' }} />
+                                </Box>
+                            </CardContent>
+                        </Card>
+                        <Card elevation={1} sx={{ borderRadius: '12px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle2" fontWeight="bold" color="#1e293b" mb={2}>Salud Portafolio: Verificaciones ({mSaludGlobal.verifActivas} Activas)</Typography>
+                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                    <Chip label={`${mSaludGlobal.verifSalud['Saludable'] || 0} Saludables`} sx={{ bgcolor: '#dcfce7', color: '#166534', fontWeight: 'bold', mb: 0.5 }} />
+                                    <Chip label={`${mSaludGlobal.verifSalud['Necesita atención'] || 0} En Atención`} sx={{ bgcolor: '#fef3c7', color: '#b45309', fontWeight: 'bold', mb: 0.5 }} />
+                                    <Chip label={`${mSaludGlobal.verifSalud['En peligro'] || 0} En Peligro`} sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold', mb: 0.5 }} />
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Box>
+
+                    {/* Filtros Gerencia (Afectan métricas de cierre/empresa) */}
+                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mt: 1 }}>
                         <TextField select size="small" label="Filtrar por Empresa" value={empresaFiltroGerencia} onChange={(e) => setEmpresaFiltroGerencia(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', ...comunInputSx }}>
                             <MenuItem value="Todas" sx={comunMenuSx}>Todas las Empresas</MenuItem>
                             {EMPRESAS_ENCARGADAS.map(e => <MenuItem key={e} value={e} sx={comunMenuSx}>{e}</MenuItem>)}
@@ -216,8 +262,9 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                         </TextField>
                         <TextField type="date" size="small" label="Fecha Inicio" InputLabelProps={{ shrink: true }} value={fechaFiltroInicio} onChange={(e) => setFechaFiltroInicio(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
                         <TextField type="date" size="small" label="Fecha Fin" InputLabelProps={{ shrink: true }} value={fechaFiltroFin} onChange={(e) => setFechaFiltroFin(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
-                        <Button onClick={() => { setFechaFiltroInicio(defaultStartDate); setFechaFiltroFin(defaultEndDate); }} size="small" color="inherit">Reiniciar Año Actual</Button>
+                        <Button onClick={() => { setFechaFiltroInicio(defaultStartDate); setFechaFiltroFin(defaultEndDate); setEmpresaFiltroGerencia('Todas'); }} size="small" color="inherit">Reiniciar Filtros</Button>
                     </Box>
+
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 3 }}>
                         <Card elevation={1} sx={{ borderRadius: '12px', borderTop: '4px solid #10b981' }}>
                             <CardContent>
@@ -249,36 +296,15 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                             </CardContent>
                         </Card>
                     </Box>
-
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
-                        <Card elevation={1} sx={{ borderRadius: '12px' }}>
-                            <CardContent>
-                                <Typography variant="subtitle2" fontWeight="bold" color="#1e293b" mb={2}>Salud Portafolio: Proyectos ({mGerencia.pmoActivos} Activos)</Typography>
-                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                    <Chip label={`${mGerencia.pmoSalud['Saludable'] || 0} Saludables`} sx={{ bgcolor: '#dcfce7', color: '#166534', fontWeight: 'bold' }} />
-                                    <Chip label={`${mGerencia.pmoSalud['Necesita atención'] || 0} En Atención`} sx={{ bgcolor: '#fef3c7', color: '#b45309', fontWeight: 'bold' }} />
-                                    <Chip label={`${mGerencia.pmoSalud['En peligro'] || 0} En Peligro`} sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold' }} />
-                                </Box>
-                            </CardContent>
-                        </Card>
-                        <Card elevation={1} sx={{ borderRadius: '12px' }}>
-                            <CardContent>
-                                <Typography variant="subtitle2" fontWeight="bold" color="#1e293b" mb={2}>Salud Portafolio: Verificaciones ({mGerencia.verifActivas} Activas)</Typography>
-                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                    <Chip label={`${mGerencia.verifSalud['Saludable'] || 0} Saludables (A Tiempo)`} sx={{ bgcolor: '#dcfce7', color: '#166534', fontWeight: 'bold' }} />
-                                    <Chip label={`${mGerencia.verifSalud['Necesita atención'] || 0} En Atención`} sx={{ bgcolor: '#fef3c7', color: '#b45309', fontWeight: 'bold' }} />
-                                    <Chip label={`${mGerencia.verifSalud['En peligro'] || 0} En Peligro (SLA Vencido)`} sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold' }} />
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    </Box>
-
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
                         <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
                     </Box>
                 </Box>
             )}
 
+            {/* ========================================================================= */}
+            {/* VISTA PMO */}
+            {/* ========================================================================= */}
             {
                 vistaDashboard === 'PMO' && (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -298,14 +324,20 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                                 </CardContent>
                             </Card>
                         )}
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
-                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Radar de Salud (Activos)</Typography>{mPMO.saludData.length > 0 ? <PieChart series={[{ data: mPMO.saludData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
-                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Top 5: Talento Requerido</Typography>{mPMO.talentoData.length > 0 ? <BarChart dataset={mPMO.talentoData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Unidades', color: '#0ea5e9' }]} layout="horizontal" height={250} margin={{ left: 120 }} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
+
+                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column' }}>
+                                <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Radar de Salud (Activos)</Typography>
+                                {mPMO.saludData.length > 0 ? <PieChart series={[{ data: mPMO.saludData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}
+                            </Paper>
                         </Box>
                     </Box>
                 )
             }
 
+            {/* ========================================================================= */}
+            {/* VISTA GC (CALIDAD) */}
+            {/* ========================================================================= */}
             {
                 vistaDashboard === 'GC' && (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -341,22 +373,27 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                                 </Card>
                             )}
                         </Box>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
-                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-                                <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución de Estados</Typography>
-                                {mGC.estadosData.length > 0 ? (
-                                    <BarChart layout="horizontal" dataset={mGC.estadosData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Expedientes', color: '#8b5cf6' }]} height={320} margin={{ left: 200, right: 20, top: 20, bottom: 20 }} />
-                                ) : (<Typography color="textSecondary">Sin datos</Typography>)}
-                            </Paper>
-                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+
+                        {/* Filtros específicos de Calidad (Solo Fechas) */}
+                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mt: 2 }}>
+                            <TextField type="date" size="small" label="Fecha Inicio" InputLabelProps={{ shrink: true }} value={fechaFiltroInicioGC} onChange={(e) => setFechaFiltroInicioGC(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
+                            <TextField type="date" size="small" label="Fecha Fin" InputLabelProps={{ shrink: true }} value={fechaFiltroFinGC} onChange={(e) => setFechaFiltroFinGC(e.target.value)} sx={{ backgroundColor: '#fff', ...comunInputSx }} />
+                            <Button onClick={() => { setFechaFiltroInicioGC(defaultStartDate); setFechaFiltroFinGC(defaultEndDate); }} size="small" color="inherit">Reiniciar Fechas</Button>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column' }}>
                                 <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Índice Reinspecciones</Typography>
-                                {mGC.segData.length > 0 ? <PieChart series={[{ data: mGC.segData }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}
+                                {mGC.segData.length > 0 ? <PieChart series={[{ data: mGC.segData }]} height={250} /> : <Typography color="textSecondary">Sin datos en este rango</Typography>}
                             </Paper>
                         </Box>
                     </Box>
                 )
             }
 
+            {/* ========================================================================= */}
+            {/* VISTA OPERATIVO */}
+            {/* ========================================================================= */}
             {
                 vistaDashboard === 'Operativo' && (() => {
                     const arrayTareasSeguro = Array.isArray(todasLasTareas) ? todasLasTareas : [];
