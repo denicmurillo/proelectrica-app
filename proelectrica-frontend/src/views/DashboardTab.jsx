@@ -44,12 +44,11 @@ const getFechaOrdenamiento = (p) => {
     return p.datos_dinamicos?.fecha_solicitud || p.fecha_programacion || '1970-01-01';
 };
 
-export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas, completarTarea, usuarioActual, abrirEdicionTarea }) => {
+export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard, abrirFicha, todasLasTareas = [], completarTarea, usuarioActual, abrirEdicionTarea }) => {
     const [empresaFiltroGerencia, setEmpresaFiltroGerencia] = useState('Todas');
     const [fechaFiltroInicio, setFechaFiltroInicio] = useState(defaultStartDate);
     const [fechaFiltroFin, setFechaFiltroFin] = useState(defaultEndDate);
 
-    // Estado para el filtro de la vista operativa
     const [filtroUsuarioTareas, setFiltroUsuarioTareas] = useState(usuarioActual || 'Todas');
 
     const mGerencia = useMemo(() => {
@@ -57,13 +56,18 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
         let pmoExitosos = 0, pmoPerdidos = 0;
         let verifExitosos = 0, verifPerdidos = 0;
 
-        proyectos.forEach(p => {
+        let pmoSalud = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
+        let verifSalud = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
+        let pmoActivos = 0, verifActivas = 0;
+
+        (proyectos || []).forEach(p => {
             const fechaOrden = getFechaOrdenamiento(p);
             if (fechaFiltroInicio && fechaOrden < fechaFiltroInicio) return;
             if (fechaFiltroFin && fechaOrden > fechaFiltroFin) return;
 
             const empresa = !isProyectoApp(p) ? (p.empresa_encargada || "UVIE Proeléctrica") : (p.empresa_encargada || "Sin Asignar");
-            const estadoSeguro = p.estado || '';
+            const estadoSeguro = typeof p.estado === 'string' ? p.estado : '';
+            const esArchivado = estadoSeguro.toLowerCase().includes('archivado');
 
             const pasaFiltro = empresaFiltroGerencia === 'Todas' || empresa === empresaFiltroGerencia;
             if (pasaFiltro) {
@@ -73,38 +77,72 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
                 if (isProyectoApp(p)) {
                     if (['Adjudicado', 'En progreso', 'Revisión por parte del cliente', 'Completado y listo para facturar', 'Facturado y pendiente de pago', 'Pago recibido y proyecto archivado'].includes(estadoSeguro)) pmoExitosos++;
                     else if (['No se ejecutó. Proyecto archivado'].includes(estadoSeguro)) pmoPerdidos++;
+
+                    if (!esArchivado && !['Cotización', 'Nueva Solicitud'].includes(estadoSeguro)) {
+                        pmoActivos++;
+                        const salud = p.salud_proyecto || 'Saludable';
+                        if (pmoSalud[salud] !== undefined) pmoSalud[salud]++;
+                    }
                 } else {
                     if (['Adjudicado y pagado', 'Asignado y programado', 'Elaboración de informe', 'En revisión del Verificador', 'Finalizado y entregado'].includes(estadoSeguro)) verifExitosos++;
                     else if (['Archivado no adjudicado'].includes(estadoSeguro)) verifPerdidos++;
+
+                    if (!esArchivado && !['Oferta Generada'].includes(estadoSeguro)) {
+                        verifActivas++;
+                        let saludV = "Saludable";
+
+                        if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
+                            // BLINDAJE: Aseguramos que bitacora sea un arreglo para que no rompa el .reverse()
+                            const bitacoraArr = Array.isArray(p.bitacora) ? p.bitacora : [];
+                            const logCambio = [...bitacoraArr].reverse().find(log => typeof log?.texto === 'string' && log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
+
+                            let dias = 0;
+                            if (logCambio && logCambio.id) dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
+
+                            if ((estadoSeguro === "Elaboración de informe" && dias > 10) || (estadoSeguro === "En revisión del Verificador" && dias > 2)) {
+                                saludV = "En peligro";
+                            } else if (estadoSeguro === "Elaboración de informe" && dias > 7) {
+                                saludV = "Necesita atención";
+                            }
+                        } else if (estadoSeguro === 'Nueva Solicitud' && !p.identificador_solicitud) {
+                            saludV = "Necesita atención";
+                        }
+                        if (verifSalud[saludV] !== undefined) verifSalud[saludV]++;
+                    }
                 }
             }
         });
 
         const pieData = Object.keys(conteoEmpresas).map((key, index) => ({ id: index, label: key, value: conteoEmpresas[key], color: COLORES_GRAFICOS[index % COLORES_GRAFICOS.length] })).filter(d => d.value > 0);
-
         const totalPMO = pmoExitosos + pmoPerdidos;
         const efecPMO = totalPMO > 0 ? Math.round((pmoExitosos / totalPMO) * 100) : 0;
-
         const totalVerif = verifExitosos + verifPerdidos;
         const efecVerif = totalVerif > 0 ? Math.round((verifExitosos / totalVerif) * 100) : 0;
 
-        return { pieData, total: totalFiltrado, efecPMO, pmoExitosos, totalPMO, efecVerif, verifExitosos, totalVerif };
+        return { pieData, total: totalFiltrado, efecPMO, pmoExitosos, totalPMO, efecVerif, verifExitosos, totalVerif, pmoSalud, verifSalud, pmoActivos, verifActivas };
     }, [proyectos, empresaFiltroGerencia, fechaFiltroInicio, fechaFiltroFin]);
 
     const mPMO = useMemo(() => {
-        const pmoProyectos = proyectos.filter(p => isProyectoApp(p) && !(p.estado || '').includes('archivado'));
+        const pmoProyectos = (proyectos || []).filter(p => {
+            const estado = typeof p.estado === 'string' ? p.estado : '';
+            return isProyectoApp(p) && !estado.toLowerCase().includes('archivado');
+        });
+
         const saludCont = { "Saludable": 0, "Necesita atención": 0, "En peligro": 0 };
         const talentoCont = {}; const proyectosCercaVencimiento = []; const proyectosEnRiesgo = [];
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
 
         pmoProyectos.forEach(p => {
             const salud = p.salud_proyecto || 'Saludable';
-            saludCont[salud] += 1;
+            if (saludCont[salud] !== undefined) saludCont[salud] += 1;
+
             if (salud === 'Necesita atención' || salud === 'En peligro') proyectosEnRiesgo.push({ id: p.id, titulo: p.titulo_proyecto, salud });
+
             const talentos = p.datos_dinamicos?.talento_requerido || [];
             if (Array.isArray(talentos)) talentos.forEach(t => { talentoCont[t] = (talentoCont[t] || 0) + 1; });
 
-            if (p.fecha_fin && !["Completado y listo para facturar", "Facturado y pendiente de pago"].includes(p.estado)) {
+            // BLINDAJE: Aseguramos que fecha_fin exista y sea string antes del split
+            if (p.fecha_fin && typeof p.fecha_fin === 'string' && !["Completado y listo para facturar", "Facturado y pendiente de pago"].includes(p.estado)) {
                 const parts = p.fecha_fin.split(/[-/]/);
                 if (parts.length === 3) {
                     const year = parts[0].length === 4 ? parts[0] : parts[2];
@@ -124,7 +162,7 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
     }, [proyectos]);
 
     const mGC = useMemo(() => {
-        const verifProyectos = proyectos.filter(p => !isProyectoApp(p));
+        const verifProyectos = (proyectos || []).filter(p => !isProyectoApp(p));
         const estadosCont = {}; const seguimientoCont = { "Primera inspección": 0, "Reinspección": 0 };
         let alertasVBA = 0; const informesPendientes = []; const alertasSLA = [];
         const estadosFlujoCalidad = ["Adjudicado y pagado", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador"];
@@ -132,12 +170,17 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
         verifProyectos.forEach(p => {
             const estadoSeguro = p.estado || 'Sin Estado';
             estadosCont[estadoSeguro] = (estadosCont[estadoSeguro] || 0) + 1;
-            if (p.datos_dinamicos?.seguimiento_inspeccion) seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
+
+            if (p.datos_dinamicos?.seguimiento_inspeccion) {
+                seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] = (seguimientoCont[p.datos_dinamicos.seguimiento_inspeccion] || 0) + 1;
+            }
             if (estadoSeguro === 'Nueva Solicitud' || !p.identificador_solicitud) alertasVBA += 1;
             if (estadosFlujoCalidad.includes(estadoSeguro)) informesPendientes.push({ id: p.id, identificador: p.identificador_solicitud || 'Sin ID', cliente: p.empresa_solicitante || 'Sin Nombre', estado: estadoSeguro });
 
             if (estadoSeguro === "Elaboración de informe" || estadoSeguro === "En revisión del Verificador") {
-                const logCambio = [...(p.bitacora || [])].reverse().find(log => log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
+                const bitacoraArr = Array.isArray(p.bitacora) ? p.bitacora : [];
+                const logCambio = [...bitacoraArr].reverse().find(log => typeof log?.texto === 'string' && log.texto.includes(`Cambió Estado (Status) a: "${estadoSeguro}"`));
+
                 let dias = 0;
                 if (logCambio && logCambio.id) dias = Math.floor((Date.now() - logCambio.id) / (1000 * 60 * 60 * 24));
                 if (estadoSeguro === "Elaboración de informe" && dias > 10) alertasSLA.push({ id: p.id, identificador: p.identificador_solicitud, cliente: p.empresa_solicitante, dias, estado: estadoSeguro });
@@ -206,136 +249,167 @@ export const DashboardTab = ({ proyectos, vistaDashboard, setVistaDashboard, abr
                             </CardContent>
                         </Card>
                     </Box>
+
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+                        <Card elevation={1} sx={{ borderRadius: '12px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle2" fontWeight="bold" color="#1e293b" mb={2}>Salud Portafolio: Proyectos ({mGerencia.pmoActivos} Activos)</Typography>
+                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                    <Chip label={`${mGerencia.pmoSalud['Saludable'] || 0} Saludables`} sx={{ bgcolor: '#dcfce7', color: '#166534', fontWeight: 'bold' }} />
+                                    <Chip label={`${mGerencia.pmoSalud['Necesita atención'] || 0} En Atención`} sx={{ bgcolor: '#fef3c7', color: '#b45309', fontWeight: 'bold' }} />
+                                    <Chip label={`${mGerencia.pmoSalud['En peligro'] || 0} En Peligro`} sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold' }} />
+                                </Box>
+                            </CardContent>
+                        </Card>
+                        <Card elevation={1} sx={{ borderRadius: '12px' }}>
+                            <CardContent>
+                                <Typography variant="subtitle2" fontWeight="bold" color="#1e293b" mb={2}>Salud Portafolio: Verificaciones ({mGerencia.verifActivas} Activas)</Typography>
+                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                    <Chip label={`${mGerencia.verifSalud['Saludable'] || 0} Saludables (A Tiempo)`} sx={{ bgcolor: '#dcfce7', color: '#166534', fontWeight: 'bold' }} />
+                                    <Chip label={`${mGerencia.verifSalud['Necesita atención'] || 0} En Atención`} sx={{ bgcolor: '#fef3c7', color: '#b45309', fontWeight: 'bold' }} />
+                                    <Chip label={`${mGerencia.verifSalud['En peligro'] || 0} En Peligro (SLA Vencido)`} sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold' }} />
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Box>
+
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
                         <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución por Empresa Encargada</Typography>{mGerencia.pieData.length > 0 ? <PieChart series={[{ data: mGerencia.pieData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos suficientes</Typography>}</Paper>
                     </Box>
                 </Box>
             )}
 
-            {vistaDashboard === 'PMO' && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {mPMO.proyectosEnRiesgo.length > 0 && (
-                        <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
-                            <CardContent sx={{ py: '16px !important' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta de Riesgo en Proyectos</Typography></Box>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosEnRiesgo.map((p) => (<Chip key={p.id} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
-                            </CardContent>
-                        </Card>
-                    )}
-                    {mPMO.proyectosCercaVencimiento.length > 0 && (
-                        <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px' }}>
-                            <CardContent sx={{ py: '16px !important' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">Proyectos Cerca del Límite de Entrega</Typography></Box>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosCercaVencimiento.map((p) => (<Chip key={p.id} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
-                            </CardContent>
-                        </Card>
-                    )}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
-                        <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Radar de Salud (Activos)</Typography>{mPMO.saludData.length > 0 ? <PieChart series={[{ data: mPMO.saludData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
-                        <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Top 5: Talento Requerido</Typography>{mPMO.talentoData.length > 0 ? <BarChart dataset={mPMO.talentoData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Unidades', color: '#0ea5e9' }]} layout="horizontal" height={250} margin={{ left: 120 }} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
-                    </Box>
-                </Box>
-            )}
-
-            {vistaDashboard === 'GC' && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {mGC.alertasSLA.length > 0 && (
-                        <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px', mb: 1 }}>
-                            <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">SLA Vencido (Atención Inmediata)</Typography></Box>
-                                <Typography variant="body2" color="#e11d48" mb={1}>Verificaciones que han superado el tiempo máximo operativo permitido:</Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                    {mGC.alertasSLA.map((inf) => (
-                                        <Chip key={inf.id} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador || 'Sin ID'} - ${inf.cliente || 'Desconocido'} (${inf.dias} días en ${inf.estado})`} size="small" variant="filled" color="error" sx={{ fontWeight: 'bold', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />
-                                    ))}
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    )}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
-                        {mGC.alertasVBA > 0 && (
-                            <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', height: '100%' }}>
-                                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta Documental (VBA)</Typography></Box>
-                                    <Typography variant="body2" color="#b45309">Existen <strong>{mGC.alertasVBA}</strong> verificaciones en "Nueva Solicitud" que aún no cuentan con un Identificador oficial.</Typography>
+            {
+                vistaDashboard === 'PMO' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {mPMO.proyectosEnRiesgo.length > 0 && (
+                            <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
+                                <CardContent sx={{ py: '16px !important' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta de Riesgo en Proyectos</Typography></Box>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosEnRiesgo.map((p) => (<Chip key={p.id} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.salud})`} color={p.salud === 'En peligro' ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
                                 </CardContent>
                             </Card>
                         )}
-                        {mGC.informesPendientes.length > 0 && (
-                            <Card elevation={0} sx={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', height: '100%' }}>
-                                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EditDocumentIcon sx={{ color: '#15803d' }} /><Typography variant="subtitle1" fontWeight="bold" color="#15803d">Flujo de Evaluación (ISO 17020)</Typography></Box>
-                                    <Typography variant="body2" color="#15803d" mb={1}>Verificaciones en proceso operativo y elaboración de informes:</Typography>
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{mGC.informesPendientes.map((inf) => (<Chip key={inf.id} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { backgroundColor: '#dcfce7' } }} />))}</Box>
+                        {mPMO.proyectosCercaVencimiento.length > 0 && (
+                            <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px' }}>
+                                <CardContent sx={{ py: '16px !important' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">Proyectos Cerca del Límite de Entrega</Typography></Box>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{mPMO.proyectosCercaVencimiento.map((p) => (<Chip key={p.id} onClick={() => abrirFicha(proyectos.find(x => x.id === p.id))} label={`${p.titulo || `Proyecto #${p.id}`} (${p.diasFaltantes < 0 ? `Vencido hace ${Math.abs(p.diasFaltantes)} días` : p.diasFaltantes === 0 ? 'Vence Hoy' : `Faltan ${p.diasFaltantes} días`})`} color={p.diasFaltantes <= 0 ? "error" : "warning"} variant="outlined" sx={{ fontWeight: 'bold', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />))}</Box>
                                 </CardContent>
                             </Card>
                         )}
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Radar de Salud (Activos)</Typography>{mPMO.saludData.length > 0 ? <PieChart series={[{ data: mPMO.saludData, innerRadius: 40, cornerRadius: 5 }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', height: '350px', display: 'flex', flexDirection: 'column' }}><Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Top 5: Talento Requerido</Typography>{mPMO.talentoData.length > 0 ? <BarChart dataset={mPMO.talentoData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Unidades', color: '#0ea5e9' }]} layout="horizontal" height={250} margin={{ left: 120 }} /> : <Typography color="textSecondary">Sin datos</Typography>}</Paper>
+                        </Box>
                     </Box>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
-                        <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-                            <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución de Estados</Typography>
-                            {mGC.estadosData.length > 0 ? (
-                                <BarChart layout="horizontal" dataset={mGC.estadosData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Expedientes', color: '#8b5cf6' }]} height={320} margin={{ left: 200, right: 20, top: 20, bottom: 20 }} />
-                            ) : (<Typography color="textSecondary">Sin datos</Typography>)}
-                        </Paper>
-                        <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-                            <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Índice Reinspecciones</Typography>
-                            {mGC.segData.length > 0 ? <PieChart series={[{ data: mGC.segData }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}
-                        </Paper>
-                    </Box>
-                </Box>
-            )}
+                )
+            }
 
-            {vistaDashboard === 'Operativo' && (() => {
-                const tareasMostrar = filtroUsuarioTareas === 'Todas' ? todasLasTareas : todasLasTareas.filter(t => t.asignado_a === filtroUsuarioTareas);
-                return (
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 3 }}>
-                        <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px' }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    <AssignmentIcon sx={{ color: '#0ea5e9', mr: 1 }} />
-                                    <Typography variant="h6" fontWeight="bold" color="#1e293b">Inspecciones y Tareas Activas</Typography>
-                                </Box>
-                                <TextField select size="small" value={filtroUsuarioTareas} onChange={(e) => setFiltroUsuarioTareas(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', '& .MuiInputBase-root': { fontSize: '0.875rem' } }}>
-                                    <MenuItem value="Todas">🌍 Todas las tareas globales</MenuItem>
-                                    {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo}>{miembro.nombre}</MenuItem>)}
-                                </TextField>
-                            </Box>
-
-                            {tareasMostrar.length === 0 ? (
-                                <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                                    <CheckCircleIcon sx={{ fontSize: 40, color: '#10b981', mb: 1 }} />
-                                    <Typography variant="body1" color="textSecondary">No hay tareas pendientes en este filtro.</Typography>
-                                </Box>
-                            ) : (
-                                <List sx={{ pt: 0 }}>
-                                    {tareasMostrar.map((tarea) => (
-                                        <ListItem key={tarea.id} sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', mb: 2, backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' } }}>
-                                            <ListItemText
-                                                primary={<Typography variant="subtitle1" fontWeight="bold" color="#0ea5e9" sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => abrirFicha(proyectos.find(x => x.id === tarea.id_proyecto))}>{tarea.proyecto}</Typography>}
-                                                secondaryTypographyProps={{ component: 'div' }}
-                                                secondary={
-                                                    <Box sx={{ mt: 1 }}>
-                                                        <Typography variant="body2" color="#334155" fontWeight="500">{tarea.descripcion}</Typography>
-                                                        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
-                                                            <strong>Responsable:</strong> {tarea.asignado_a.split('@')[0]} | <strong>Asignado por:</strong> {tarea.asignado_por} | <strong>Límite:</strong> {tarea.fecha_limite}
-                                                        </Typography>
-                                                    </Box>
-                                                }
-                                            />
-                                            <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', gap: 1 }}>
-                                                {tarea.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(tarea.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
-                                                <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(tarea)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
-                                                <Button variant="contained" size="small" color="success" onClick={() => completarTarea(tarea.id)} sx={{ textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
-                                            </Box>
-                                        </ListItem>
-                                    ))}
-                                </List>
+            {
+                vistaDashboard === 'GC' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {mGC.alertasSLA.length > 0 && (
+                            <Card elevation={0} sx={{ backgroundColor: '#fef2f2', border: '1px solid #fecdd3', borderRadius: '8px', mb: 1 }}>
+                                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EventBusyIcon sx={{ color: '#e11d48' }} /><Typography variant="subtitle1" fontWeight="bold" color="#e11d48">SLA Vencido (Atención Inmediata)</Typography></Box>
+                                    <Typography variant="body2" color="#e11d48" mb={1}>Verificaciones que han superado el tiempo máximo operativo permitido:</Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {mGC.alertasSLA.map((inf) => (
+                                            <Chip key={inf.id} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador || 'Sin ID'} - ${inf.cliente || 'Desconocido'} (${inf.dias} días en ${inf.estado})`} size="small" variant="filled" color="error" sx={{ fontWeight: 'bold', cursor: 'pointer', '&:hover': { opacity: 0.8 } }} />
+                                        ))}
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        )}
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+                            {mGC.alertasVBA > 0 && (
+                                <Card elevation={0} sx={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', height: '100%' }}>
+                                    <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><WarningAmberIcon sx={{ color: '#d97706' }} /><Typography variant="subtitle1" fontWeight="bold" color="#b45309">Alerta Documental (VBA)</Typography></Box>
+                                        <Typography variant="body2" color="#b45309">Existen <strong>{mGC.alertasVBA}</strong> verificaciones en "Nueva Solicitud" que aún no cuentan con un Identificador oficial.</Typography>
+                                    </CardContent>
+                                </Card>
                             )}
-                        </Paper>
+                            {mGC.informesPendientes.length > 0 && (
+                                <Card elevation={0} sx={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', height: '100%' }}>
+                                    <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '16px !important' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EditDocumentIcon sx={{ color: '#15803d' }} /><Typography variant="subtitle1" fontWeight="bold" color="#15803d">Flujo de Evaluación (ISO 17020)</Typography></Box>
+                                        <Typography variant="body2" color="#15803d" mb={1}>Verificaciones en proceso operativo y elaboración de informes:</Typography>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{mGC.informesPendientes.map((inf) => (<Chip key={inf.id} onClick={() => abrirFicha(proyectos.find(x => x.id === inf.id))} label={`${inf.identificador} - ${inf.cliente} (${inf.estado})`} size="small" variant="outlined" sx={{ color: '#15803d', borderColor: '#15803d', backgroundColor: '#fff', cursor: 'pointer', '&:hover': { backgroundColor: '#dcfce7' } }} />))}</Box>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </Box>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+                                <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Distribución de Estados</Typography>
+                                {mGC.estadosData.length > 0 ? (
+                                    <BarChart layout="horizontal" dataset={mGC.estadosData} yAxis={[{ scaleType: 'band', dataKey: 'name' }]} xAxis={[{ tickMinStep: 1 }]} series={[{ dataKey: 'value', label: 'Expedientes', color: '#8b5cf6' }]} height={320} margin={{ left: 200, right: 20, top: 20, bottom: 20 }} />
+                                ) : (<Typography color="textSecondary">Sin datos</Typography>)}
+                            </Paper>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+                                <Typography variant="subtitle1" fontWeight="bold" color="#1e293b" mb={2}>Índice Reinspecciones</Typography>
+                                {mGC.segData.length > 0 ? <PieChart series={[{ data: mGC.segData }]} height={250} /> : <Typography color="textSecondary">Sin datos</Typography>}
+                            </Paper>
+                        </Box>
                     </Box>
-                );
-            })()}
-        </Box>
+                )
+            }
+
+            {
+                vistaDashboard === 'Operativo' && (() => {
+                    const arrayTareasSeguro = Array.isArray(todasLasTareas) ? todasLasTareas : [];
+                    const tareasMostrar = filtroUsuarioTareas === 'Todas' ? arrayTareasSeguro : arrayTareasSeguro.filter(t => t.asignado_a === filtroUsuarioTareas);
+                    return (
+                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 3 }}>
+                            <Paper elevation={1} sx={{ p: 3, borderRadius: '12px', minHeight: '350px' }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <AssignmentIcon sx={{ color: '#0ea5e9', mr: 1 }} />
+                                        <Typography variant="h6" fontWeight="bold" color="#1e293b">Inspecciones y Tareas Activas</Typography>
+                                    </Box>
+                                    <TextField select size="small" value={filtroUsuarioTareas} onChange={(e) => setFiltroUsuarioTareas(e.target.value)} sx={{ width: '250px', backgroundColor: '#fff', '& .MuiInputBase-root': { fontSize: '0.875rem' } }}>
+                                        <MenuItem value="Todas">🌍 Todas las tareas globales</MenuItem>
+                                        {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo}>{miembro.nombre}</MenuItem>)}
+                                    </TextField>
+                                </Box>
+
+                                {tareasMostrar.length === 0 ? (
+                                    <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                                        <CheckCircleIcon sx={{ fontSize: 40, color: '#10b981', mb: 1 }} />
+                                        <Typography variant="body1" color="textSecondary">No hay tareas pendientes en este filtro.</Typography>
+                                    </Box>
+                                ) : (
+                                    <List sx={{ pt: 0 }}>
+                                        {tareasMostrar.map((tarea) => (
+                                            <ListItem key={tarea.id} sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', mb: 2, backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' } }}>
+                                                <ListItemText
+                                                    primary={<Typography variant="subtitle1" fontWeight="bold" color="#0ea5e9" sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => abrirFicha((proyectos || []).find(x => x.id === tarea.id_proyecto))}>{tarea.proyecto}</Typography>}
+                                                    secondaryTypographyProps={{ component: 'div' }}
+                                                    secondary={
+                                                        <Box sx={{ mt: 1 }}>
+                                                            <Typography variant="body2" color="#334155" fontWeight="500">{tarea.descripcion}</Typography>
+                                                            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
+                                                                <strong>Responsable:</strong> {tarea.asignado_a.split('@')[0]} | <strong>Asignado por:</strong> {tarea.asignado_por} | <strong>Límite:</strong> {tarea.fecha_limite}
+                                                            </Typography>
+                                                        </Box>
+                                                    }
+                                                />
+                                                <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', gap: 1 }}>
+                                                    {tarea.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(tarea.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
+                                                    <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(tarea)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
+                                                    <Button variant="contained" size="small" color="success" onClick={() => completarTarea(tarea.id)} sx={{ textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
+                                                </Box>
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                )}
+                            </Paper>
+                        </Box>
+                    );
+                })()
+            }
+        </Box >
     );
 };

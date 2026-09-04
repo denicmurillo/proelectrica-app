@@ -317,7 +317,7 @@ function App() {
         datos_dinamicos: datosDinamicosActualizados
       };
       const res = await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
-      
+
       const proyectoActualizado = {
         ...proyectoBase,
         ...payload,
@@ -339,7 +339,7 @@ function App() {
   const verificarYGuardarCampo = (campo, valorNuevo) => {
     if (!proyectoSeleccionado) return;
     if (JSON.stringify(datosGuardados[campo]) === JSON.stringify(valorNuevo)) return;
-    
+
     let progresoAjustado = datosGC.progreso;
     if (campo === 'progreso') {
       progresoAjustado = Number(valorNuevo) || 0;
@@ -460,40 +460,55 @@ function App() {
         <DashboardTab proyectos={proyectos} vistaDashboard={vistaDashboard} setVistaDashboard={setVistaDashboard} abrirFicha={abrirFicha} todasLasTareas={todasLasTareas} completarTarea={handleCompletarTarea} usuarioActual={session?.user?.email} abrirEdicionTarea={abrirEdicionTarea} />
       ) : (
         <Box sx={{ flexGrow: 1, px: { xs: 2, md: 4, lg: 6 }, py: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
-          <Paper elevation={1} sx={{ width: { xs: '100%', md: '220px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
-            <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}><Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#64748b', fontSize: '0.8rem' }}>VISTAS Y FILTROS</Typography></Box>
+          <Paper elevation={1} sx={{ width: { xs: '100%', md: '230px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
+            <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1e293b', fontSize: '0.8rem' }}>VISTAS Y FILTROS</Typography>
+            </Box>
             <List dense disablePadding>
               <ListItemButton selected={filtroEstado === 'Todos'} onClick={() => setFiltroEstado('Todos')}>
-                <ListItemText primary="Todos los registros" sx={{ '& .MuiListItemText-primary': { fontWeight: filtroEstado === 'Todos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#64748b', mr: 1.5 }} />
+                <ListItemText primary="Todos los registros" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Todos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
                 <Chip label={dataAplicacion.length} size="small" sx={{ height: '20px', fontSize: '0.7rem' }} />
               </ListItemButton>
               <Divider />
 
-              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#8b5cf6', fontSize: '0.7rem' }}>COTIZACIONES</Typography></Box>
+              <Box sx={{ px: 2, py: 1.5 }}>
+                <Box sx={{ display: 'inline-block', bgcolor: '#8b5cf6', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>COTIZACIONES</Box>
+              </Box>
               <ListItemButton selected={filtroEstado === 'Cotizaciones'} onClick={() => setFiltroEstado('Cotizaciones')}>
-                <ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#7c3aed', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Nueva Solicitud", "Oferta Generada", "Cotización"])}</Typography>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#8b5cf6', mr: 1.5 }} />
+                <ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Cotizaciones' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Nueva Solicitud", "Oferta Generada", "Cotización"])}</Typography>
               </ListItemButton>
               <Divider />
 
-              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#dc2626', fontSize: '0.7rem' }}>PROYECTOS ACTIVOS</Typography></Box>
+              <Box sx={{ px: 2, py: 1.5 }}>
+                <Box sx={{ display: 'inline-block', bgcolor: '#dc2626', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>PROYECTOS ACTIVOS</Box>
+              </Box>
               <ListItemButton selected={filtroEstado === 'Activos'} onClick={() => setFiltroEstado('Activos')}>
-                <ListItemText primary="Mostrar Activos" sx={{ '& .MuiListItemText-primary': { color: '#dc2626', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"])}</Typography>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#dc2626', mr: 1.5 }} />
+                <ListItemText primary="Mostrar Activos" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Activos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"])}</Typography>
               </ListItemButton>
               <Divider />
 
-              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f59e0b', fontSize: '0.7rem' }}>FACTURACIÓN Y COBRO</Typography></Box>
+              <Box sx={{ px: 2, py: 1.5 }}>
+                <Box sx={{ display: 'inline-block', bgcolor: '#d97706', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>FACTURACIÓN Y COBRO</Box>
+              </Box>
               <ListItemButton selected={filtroEstado === 'Facturación'} onClick={() => setFiltroEstado('Facturación')}>
-                <ListItemText primary="Mostrar Pendientes" sx={{ '& .MuiListItemText-primary': { color: '#d97706', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"])}</Typography>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#d97706', mr: 1.5 }} />
+                <ListItemText primary="Mostrar Pendientes" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Facturación' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"])}</Typography>
               </ListItemButton>
               <Divider />
 
-              <Box sx={{ px: 2, py: 1 }}><Typography variant="caption" sx={{ fontWeight: 'bold', color: '#2563eb', fontSize: '0.7rem' }}>ARCHIVADOS</Typography></Box>
+              <Box sx={{ px: 2, py: 1.5 }}>
+                <Box sx={{ display: 'inline-block', bgcolor: '#2563eb', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>ARCHIVADOS</Box>
+              </Box>
               <ListItemButton selected={filtroEstado === 'Archivados'} onClick={() => setFiltroEstado('Archivados')}>
-                <ListItemText primary="Mostrar Archivados" sx={{ '& .MuiListItemText-primary': { color: '#2563eb', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem' }}>{contarPorGrupo(["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"])}</Typography>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#2563eb', mr: 1.5 }} />
+                <ListItemText primary="Mostrar Archivados" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Archivados' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"])}</Typography>
               </ListItemButton>
             </List>
           </Paper>
@@ -540,7 +555,15 @@ function App() {
                             <TableCell sx={tableCellSx}>{proyecto.fecha_fin ? formatFechaInput(proyecto.fecha_fin) : '---'}</TableCell>
                           </>
                         ) : (
-                          <><TableCell sx={{ ...tableCellSx, fontWeight: 'bold', color: '#8b5cf6' }}>{proyecto.titulo_proyecto || 'Sin Título'}</TableCell><TableCell sx={{ ...tableCellSx, fontWeight: 500, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell><TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell><TableCell sx={tableCellSx}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ width: '100%', minWidth: '80px', bgcolor: '#e2e8f0', borderRadius: '4px', height: '6px' }}><Box sx={{ bgcolor: '#0ea5e9', height: '6px', borderRadius: '4px', width: `${proyecto.progreso || 0}%` }} /></Box><Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>{proyecto.progreso || 0}%</Typography></Box></TableCell><TableCell sx={tableCellSx}>{proyecto.pago || 'Pendiente'}</TableCell><TableCell sx={tableCellSx}>{proyecto.inspector || 'Sin asignar'}</TableCell></>
+                          <>
+                            {/* AQUÍ ESTÁ EL CAMBIO DE COLOR A AZUL INSTITUCIONAL #303092 */}
+                            <TableCell sx={{ ...tableCellSx, fontWeight: 'bold', color: '#303092' }}>{proyecto.titulo_proyecto || 'Sin Título'}</TableCell>
+                            <TableCell sx={{ ...tableCellSx, fontWeight: 500, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
+                            <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
+                            <TableCell sx={tableCellSx}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ width: '100%', minWidth: '80px', bgcolor: '#e2e8f0', borderRadius: '4px', height: '6px' }}><Box sx={{ bgcolor: '#0ea5e9', height: '6px', borderRadius: '4px', width: `${proyecto.progreso || 0}%` }} /></Box><Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>{proyecto.progreso || 0}%</Typography></Box></TableCell>
+                            <TableCell sx={tableCellSx}>{proyecto.pago || 'Pendiente'}</TableCell>
+                            <TableCell sx={tableCellSx}>{proyecto.inspector || 'Sin asignar'}</TableCell>
+                          </>
                         )}
                       </TableRow>
                     ))
