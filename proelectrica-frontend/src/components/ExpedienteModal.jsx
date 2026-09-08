@@ -52,7 +52,7 @@ export const ExpedienteModal = ({
             // 275ms asegura que la animación nativa del Modal de MUI (225ms) haya terminado
             const timer = setTimeout(() => {
                 chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-            }, 275);
+            }, 300);
             return () => clearTimeout(timer);
         }
     }, [bitacora, modalAbierto, tabDerecha, proyectoSeleccionado?.id]); // Añadimos el ID como gatillo
