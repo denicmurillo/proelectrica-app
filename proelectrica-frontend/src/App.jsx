@@ -426,6 +426,19 @@ function App() {
     return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
   };
 
+  // --- LÓGICA DE NAVEGACIÓN ENTRE EXPEDIENTES ---
+  const indiceActual = proyectoSeleccionado ? listaMostrarOrdenada.findIndex(p => p.id === proyectoSeleccionado.id) : -1;
+  const hayAnterior = indiceActual > 0;
+  const haySiguiente = indiceActual >= 0 && indiceActual < listaMostrarOrdenada.length - 1;
+
+  const handleNavegarExpediente = (direccion) => {
+    if (direccion === 'anterior' && hayAnterior) {
+      abrirFicha(listaMostrarOrdenada[indiceActual - 1]);
+    } else if (direccion === 'siguiente' && haySiguiente) {
+      abrirFicha(listaMostrarOrdenada[indiceActual + 1]);
+    }
+  };
+
   const tableCellSx = { fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px', py: 1.5 };
   const tableHeadSx = { ...tableCellSx, fontWeight: 'bold', color: '#475569' };
 
@@ -577,7 +590,18 @@ function App() {
 
       {/* MODAL PRINCIPAL: EXPEDIENTE AISLADO */}
       <ExpedienteModal
-        modalAbierto={modalAbierto} cerrarFicha={cerrarFicha} proyectoSeleccionado={proyectoSeleccionado} esVistaProyecto={esVistaProyecto} estadoGuardado={estadoGuardado} handleEliminarOArchivar={handleEliminarOArchivar} datosGC={datosGC} handleTeclado={handleTeclado} verificarYGuardarCampo={verificarYGuardarCampo} archivos={archivos} eliminarArchivo={eliminarArchivo} abrirGoogleDrivePicker={abrirGoogleDrivePicker} tabDerecha={tabDerecha} setTabDerecha={setTabDerecha} setTareasExpandidas={setTareasExpandidas} setBitacoraExpandida={setBitacoraExpandida} datosNuevaTarea={datosNuevaTarea} setDatosNuevaTarea={setDatosNuevaTarea} handleCrearTarea={handleCrearTarea} creandoTarea={creandoTarea} tareasProyecto={tareasProyecto} abrirEdicionTarea={abrirEdicionTarea} handleCompletarTarea={handleCompletarTarea} bitacora={bitacora} chatEndRef={chatEndRef} nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario} agregarComentario={agregarComentario} inspectorOpciones={inspectorOpciones} colabOpciones={colabOpciones}
+        modalAbierto={modalAbierto} cerrarFicha={cerrarFicha} proyectoSeleccionado={proyectoSeleccionado}
+        esVistaProyecto={esVistaProyecto} estadoGuardado={estadoGuardado} handleEliminarOArchivar={handleEliminarOArchivar}
+        datosGC={datosGC} handleTeclado={handleTeclado} verificarYGuardarCampo={verificarYGuardarCampo}
+        archivos={archivos} eliminarArchivo={eliminarArchivo} abrirGoogleDrivePicker={abrirGoogleDrivePicker}
+        tabDerecha={tabDerecha} setTabDerecha={setTabDerecha} setTareasExpandidas={setTareasExpandidas}
+        setBitacoraExpandida={setBitacoraExpandida} datosNuevaTarea={datosNuevaTarea} setDatosNuevaTarea={setDatosNuevaTarea}
+        handleCrearTarea={handleCrearTarea} creandoTarea={creandoTarea} tareasProyecto={tareasProyecto}
+        abrirEdicionTarea={abrirEdicionTarea} handleCompletarTarea={handleCompletarTarea} bitacora={bitacora}
+        nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario} agregarComentario={agregarComentario}
+        inspectorOpciones={inspectorOpciones} colabOpciones={colabOpciones}
+        // Nuevas propiedades de navegación:
+        handleNavegarExpediente={handleNavegarExpediente} hayAnterior={hayAnterior} haySiguiente={haySiguiente}
       />
 
       {/* MODALES SECUNDARIOS Y SNACKBAR GLOBAL */}

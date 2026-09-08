@@ -1,6 +1,4 @@
-// src/components/ExpedienteModal.jsx
-
-import React from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, Box, Typography, IconButton, Tooltip,
     TextField, Chip, MenuItem, Slider, Autocomplete, Button, Tabs, Tab, List, ListItem,
@@ -15,6 +13,8 @@ import EventBusyIcon from '@mui/icons-material/EventBusy';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import EditIcon from '@mui/icons-material/Edit';
 import SendIcon from '@mui/icons-material/Send';
+import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 
 // Importamos las constantes centralizadas
 import {
@@ -38,15 +38,43 @@ export const ExpedienteModal = ({
     tabDerecha, setTabDerecha, setTareasExpandidas, setBitacoraExpandida,
     datosNuevaTarea, setDatosNuevaTarea, handleCrearTarea, creandoTarea,
     tareasProyecto, abrirEdicionTarea, handleCompletarTarea,
-    bitacora, chatEndRef, nuevoComentario, setNuevoComentario, agregarComentario,
-    inspectorOpciones, colabOpciones
+    bitacora, nuevoComentario, setNuevoComentario, agregarComentario,
+    inspectorOpciones, colabOpciones,
+    handleNavegarExpediente, hayAnterior, haySiguiente // Nuevos controles
 }) => {
+
+    // 1. Referencia interna para el Auto-Scroll de la bitácora
+    const chatEndRef = useRef(null);
+
+    // 2. Efecto Inteligente: Forzar el scroll hacia abajo al abrir o añadir comentario
+    useEffect(() => {
+        if (modalAbierto && tabDerecha === 0 && chatEndRef.current) {
+            // Un pequeñísimo retraso asegura que React ya pintó los elementos en pantalla
+            const timer = setTimeout(() => {
+                chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+            }, 150);
+            return () => clearTimeout(timer);
+        }
+    }, [bitacora, modalAbierto, tabDerecha]);
+
+    // 3. Ordenamiento Automático de Tareas (Completadas al fondo)
+    const tareasOrdenadas = useMemo(() => {
+        if (!tareasProyecto) return [];
+        return [...tareasProyecto].sort((a, b) => {
+            if (a.estado === 'Completada' && b.estado !== 'Completada') return 1;
+            if (a.estado !== 'Completada' && b.estado === 'Completada') return -1;
+            return b.id - a.id; // Si ambas están pendientes o completadas, ordena por ID descendente
+        });
+    }, [tareasProyecto]);
+
     const esProgresoBloqueado = ESTADOS_PROGRESO_BLOQUEADO.includes(datosGC.estado);
 
     if (!proyectoSeleccionado) return null;
 
     return (
         <Dialog open={modalAbierto} onClose={cerrarFicha} maxWidth="xl" fullWidth sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}>
+
+            {/* CABECERA */}
             <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, flexShrink: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
@@ -61,9 +89,35 @@ export const ExpedienteModal = ({
                     <IconButton onClick={cerrarFicha}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
                 </Box>
             </DialogTitle>
-            <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
+
+            {/* CUERPO DEL MODAL (Con posición relativa para las flechas de navegación) */}
+            <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden', position: 'relative' }}>
+
+                {/* FLECHAS DE NAVEGACIÓN ESTILO PODIO */}
+                {hayAnterior && (
+                    <Tooltip title="Expediente Anterior" placement="right">
+                        <IconButton
+                            onClick={() => handleNavegarExpediente('anterior')}
+                            sx={{ position: 'absolute', top: '50%', left: 8, transform: 'translateY(-50%)', bgcolor: 'rgba(255, 255, 255, 0.95)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, width: 48, height: 48, '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-50%) scale(1.05)' }, transition: 'all 0.2s' }}
+                        >
+                            <NavigateBeforeIcon fontSize="large" sx={{ color: '#0ea5e9' }} />
+                        </IconButton>
+                    </Tooltip>
+                )}
+
+                {haySiguiente && (
+                    <Tooltip title="Siguiente Expediente" placement="left">
+                        <IconButton
+                            onClick={() => handleNavegarExpediente('siguiente')}
+                            sx={{ position: 'absolute', top: '50%', right: 8, transform: 'translateY(-50%)', bgcolor: 'rgba(255, 255, 255, 0.95)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, width: 48, height: 48, '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-50%) scale(1.05)' }, transition: 'all 0.2s' }}
+                        >
+                            <NavigateNextIcon fontSize="large" sx={{ color: '#0ea5e9' }} />
+                        </IconButton>
+                    </Tooltip>
+                )}
+
                 {/* COLUMNA IZQUIERDA: FORMULARIO */}
-                <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', px: '3rem', backgroundColor: '#fff', minHeight: 0 }}>
+                <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', pl: '4rem', pr: '2rem', backgroundColor: '#fff', minHeight: 0 }}>
                     <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px', mt: 1 }}>Información del Cliente y Ubicación</Typography><Box sx={{ pl: 1 }}>
                         {esVistaProyecto && <FilaEditable etiqueta="Título del Proyecto"><TextField fullWidth size="small" variant="standard" name="tituloProyecto" value={datosGC.tituloProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('tituloProyecto', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#8b5cf6', fontSize: '1rem' } }} /></FilaEditable>}
                         {esVistaProyecto ? <FilaEditable etiqueta="Empresa Encargada"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{EMPRESAS_ENCARGADAS.map(empresa => (<Chip key={empresa} label={empresa} onClick={() => verificarYGuardarCampo('empresaEncargada', empresa)} color={datosGC.empresaEncargada === empresa ? "primary" : "default"} variant={datosGC.empresaEncargada === empresa ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.empresaEncargada === empresa ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable> : <FilaDato etiqueta="Empresa Encargada" valor="UVIE Proeléctrica" colorValor="primary" />}
@@ -100,13 +154,13 @@ export const ExpedienteModal = ({
                 </Box>
 
                 {/* COLUMNA DERECHA: PESTAÑAS Y CONTENIDO (TAREAS Y BITÁCORA) */}
-                <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc', pr: '2rem' }}>
                     <Tabs value={tabDerecha} onChange={(e, val) => setTabDerecha(val)} variant="fullWidth" sx={{ minHeight: '48px', borderBottom: '1px solid #e2e8f0', bgcolor: '#fff' }}>
                         <Tab label="Bitácora y Actividad" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 0 ? '#8b5cf6 !important' : 'text.secondary' }} />
                         <Tab label="Tareas del Proyecto" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 1 ? '#0ea5e9 !important' : 'text.secondary' }} />
                     </Tabs>
 
-                    {/* CONTENIDO PESTAÑA 1: TAREAS */}
+                    {/* CONTENIDO PESTAÑA 1: TAREAS (AHORA ORDENADAS) */}
                     {tabDerecha === 1 && (
                         <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
                             <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -131,11 +185,11 @@ export const ExpedienteModal = ({
                             </Box>
 
                             <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
-                                {tareasProyecto.length === 0 ? (
+                                {tareasOrdenadas.length === 0 ? (
                                     <Typography variant="body2" color="textSecondary" align="center" sx={{ mt: 2 }}>No hay tareas asignadas a este proyecto.</Typography>
                                 ) : (
                                     <List disablePadding>
-                                        {tareasProyecto.map(t => (
+                                        {tareasOrdenadas.map(t => (
                                             <ListItem key={t.id} sx={{ px: 0, mb: 0.5, py: 0, opacity: t.estado === 'Completada' ? 0.6 : 1 }}>
                                                 <ListItemText
                                                     primary={<Typography variant="body2" fontWeight="bold" sx={{ textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
@@ -186,6 +240,7 @@ export const ExpedienteModal = ({
                                             </ListItem>
                                         );
                                     })}
+                                    {/* ANCLA INVISIBLE PARA EL AUTO-SCROLL */}
                                     <div ref={chatEndRef} />
                                 </List>
                             </Box>

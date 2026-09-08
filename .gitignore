@@ -2,3 +2,5 @@
 Documentación/
 .env
 google-credentials.json
+*.db
+proelectrica.db
