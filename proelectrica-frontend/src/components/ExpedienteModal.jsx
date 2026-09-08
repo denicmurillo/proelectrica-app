@@ -119,7 +119,7 @@ export const ExpedienteModal = ({
                 {/* COLUMNA IZQUIERDA: FORMULARIO */}
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', pl: '4rem', pr: '2rem', backgroundColor: '#fff', minHeight: 0 }}>
                     <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px', mt: 1 }}>Información del Cliente y Ubicación</Typography><Box sx={{ pl: 1 }}>
-                        {esVistaProyecto && <FilaEditable etiqueta="Título del Proyecto"><TextField fullWidth size="small" variant="standard" name="tituloProyecto" value={datosGC.tituloProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('tituloProyecto', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#8b5cf6', fontSize: '1rem' } }} /></FilaEditable>}
+                        {esVistaProyecto && <FilaEditable etiqueta="Título del Proyecto"><TextField fullWidth size="small" variant="standard" name="tituloProyecto" value={datosGC.tituloProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('tituloProyecto', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#303092', fontSize: '1rem' } }} /></FilaEditable>}
                         {esVistaProyecto ? <FilaEditable etiqueta="Empresa Encargada"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{EMPRESAS_ENCARGADAS.map(empresa => (<Chip key={empresa} label={empresa} onClick={() => verificarYGuardarCampo('empresaEncargada', empresa)} color={datosGC.empresaEncargada === empresa ? "primary" : "default"} variant={datosGC.empresaEncargada === empresa ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.empresaEncargada === empresa ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable> : <FilaDato etiqueta="Empresa Encargada" valor="UVIE Proeléctrica" colorValor="primary" />}
                         <FilaEditable etiqueta="Cliente / Solicitante"><TextField fullWidth size="small" variant="standard" name="empresa_solicitante" value={datosGC.empresa_solicitante} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('empresa_solicitante', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#0ea5e9', fontSize: '0.875rem' } }} /></FilaEditable>
                         {!esVistaProyecto && <FilaDato etiqueta="Identificador (VBA)" valor={proyectoSeleccionado.identificador_solicitud} colorValor="primary" />}
@@ -156,7 +156,7 @@ export const ExpedienteModal = ({
                 {/* COLUMNA DERECHA: PESTAÑAS Y CONTENIDO (TAREAS Y BITÁCORA) */}
                 <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc', pr: '2rem' }}>
                     <Tabs value={tabDerecha} onChange={(e, val) => setTabDerecha(val)} variant="fullWidth" sx={{ minHeight: '48px', borderBottom: '1px solid #e2e8f0', bgcolor: '#fff' }}>
-                        <Tab label="Bitácora y Actividad" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 0 ? '#8b5cf6 !important' : 'text.secondary' }} />
+                        <Tab label="Bitácora y Actividad" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 0 ? '#303092 !important' : 'text.secondary' }} />
                         <Tab label="Tareas del Proyecto" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 1 ? '#0ea5e9 !important' : 'text.secondary' }} />
                     </Tabs>
 
@@ -218,9 +218,9 @@ export const ExpedienteModal = ({
                     {tabDerecha === 0 && (
                         <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
                             <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Typography variant="subtitle1" sx={{ color: '#8b5cf6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial del Expediente</Typography>
+                                <Typography variant="subtitle1" sx={{ color: '#303092', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial del Expediente</Typography>
                                 <Tooltip title="Expandir Bitácora">
-                                    <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#8b5cf6', padding: 0.5 }}>
+                                    <IconButton size="small" onClick={() => setBitacoraExpandida(true)} sx={{ color: '#303092', padding: 0.5 }}>
                                         <OpenInFullIcon fontSize="small" />
                                     </IconButton>
                                 </Tooltip>
