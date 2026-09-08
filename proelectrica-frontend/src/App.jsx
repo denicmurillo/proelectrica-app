@@ -90,7 +90,7 @@ function App() {
     cargarTodasLasTareas();
     inicializarGoogleAPIs();
     inyectarSolucionZIndex();
-    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 300000);
+    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 60000);
     return () => clearInterval(intervaloRefresh);
   }, [session]);
 

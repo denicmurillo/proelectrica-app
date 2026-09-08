@@ -46,16 +46,16 @@ export const ExpedienteModal = ({
     // 1. Referencia interna para el Auto-Scroll de la bitácora
     const chatEndRef = useRef(null);
 
-    // 2. Efecto Inteligente: Forzar el scroll hacia abajo al abrir o añadir comentario
+    // 2. Efecto Inteligente: Forzar el scroll hacia abajo al abrir, navegar o añadir comentario
     useEffect(() => {
         if (modalAbierto && tabDerecha === 0 && chatEndRef.current) {
-            // Un pequeñísimo retraso asegura que React ya pintó los elementos en pantalla
+            // 275ms asegura que la animación nativa del Modal de MUI (225ms) haya terminado
             const timer = setTimeout(() => {
                 chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-            }, 150);
+            }, 275);
             return () => clearTimeout(timer);
         }
-    }, [bitacora, modalAbierto, tabDerecha]);
+    }, [bitacora, modalAbierto, tabDerecha, proyectoSeleccionado?.id]); // Añadimos el ID como gatillo
 
     // 3. Ordenamiento Automático de Tareas (Completadas al fondo)
     const tareasOrdenadas = useMemo(() => {
