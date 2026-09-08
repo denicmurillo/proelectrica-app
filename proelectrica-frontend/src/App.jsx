@@ -69,8 +69,8 @@ function App() {
   const [datosGuardados, setDatosGuardados] = useState({});
 
   // --- REFERENCIAS ---
-  const chatEndRef = useRef(null);
   const chatExpandedEndRef = useRef(null);
+  const bitacoraExpandidaContainerRef = useRef(null);
   const tokenClientRef = useRef(null);
   const [pickerCargado, setPickerCargado] = useState(false);
 
@@ -94,10 +94,28 @@ function App() {
     return () => clearInterval(intervaloRefresh);
   }, [session]);
 
+  const scrollearBitacoraExpandidaAlFondo = (suave = false) => {
+    if (bitacoraExpandidaContainerRef.current) {
+      if (suave) {
+        bitacoraExpandidaContainerRef.current.scrollTo({ top: bitacoraExpandidaContainerRef.current.scrollHeight, behavior: 'smooth' });
+      } else {
+        bitacoraExpandidaContainerRef.current.scrollTop = bitacoraExpandidaContainerRef.current.scrollHeight;
+      }
+    }
+    if (chatExpandedEndRef.current) {
+      try { chatExpandedEndRef.current.scrollIntoView({ behavior: suave ? 'smooth' : 'instant', block: 'end' }); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
-    if (chatEndRef.current && tabDerecha === 0) chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-    if (chatExpandedEndRef.current) chatExpandedEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [bitacora, modalAbierto, bitacoraExpandida, tabDerecha]);
+    if (bitacoraExpandida) {
+      scrollearBitacoraExpandidaAlFondo(false);
+      const raf = requestAnimationFrame(() => scrollearBitacoraExpandidaAlFondo(false));
+      const t1 = setTimeout(() => scrollearBitacoraExpandidaAlFondo(false), 100);
+      const t2 = setTimeout(() => scrollearBitacoraExpandidaAlFondo(false), 300);
+      return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [bitacoraExpandida, bitacora]);
 
   // --- LÓGICA DE GOOGLE DRIVE ---
   const inyectarSolucionZIndex = () => {
@@ -620,12 +638,21 @@ function App() {
         </Box>
       </Dialog>
 
-      <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
+      <Dialog
+        open={bitacoraExpandida}
+        onClose={() => setBitacoraExpandida(false)}
+        maxWidth="md"
+        fullWidth
+        TransitionProps={{
+          onEntered: () => scrollearBitacoraExpandidaAlFondo(false)
+        }}
+        sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}
+      >
         <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8b5cf6' }}>Bitácora Completa del Expediente</Typography>
           <IconButton onClick={() => setBitacoraExpandida(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
         </DialogTitle>
-        <DialogContent sx={{ py: 1, px: 3, backgroundColor: '#f1f5f9' }}>
+        <DialogContent ref={bitacoraExpandidaContainerRef} sx={{ py: 1, px: 3, backgroundColor: '#f1f5f9' }}>
           <List disablePadding>
             {bitacora.map((comentario) => {
               const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';

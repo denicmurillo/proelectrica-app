@@ -43,19 +43,68 @@ export const ExpedienteModal = ({
     handleNavegarExpediente, hayAnterior, haySiguiente // Nuevos controles
 }) => {
 
-    // 1. Referencia interna para el Auto-Scroll de la bitácora
+    // 1. Referencias internas para el Auto-Scroll de la bitácora
+    const bitacoraContainerRef = useRef(null);
     const chatEndRef = useRef(null);
+    const prevBitacoraLength = useRef(bitacora?.length || 0);
 
-    // 2. Efecto Inteligente: Forzar el scroll hacia abajo al abrir, navegar o añadir comentario
-    useEffect(() => {
-        if (modalAbierto && tabDerecha === 0 && chatEndRef.current) {
-            // 275ms asegura que la animación nativa del Modal de MUI (225ms) haya terminado
-            const timer = setTimeout(() => {
-                chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-            }, 300);
-            return () => clearTimeout(timer);
+    const hacerScrollAlFondo = (comportamiento = 'auto') => {
+        if (bitacoraContainerRef.current) {
+            if (comportamiento === 'smooth') {
+                bitacoraContainerRef.current.scrollTo({
+                    top: bitacoraContainerRef.current.scrollHeight,
+                    behavior: 'smooth'
+                });
+            } else {
+                bitacoraContainerRef.current.scrollTop = bitacoraContainerRef.current.scrollHeight;
+            }
         }
-    }, [bitacora, modalAbierto, tabDerecha, proyectoSeleccionado?.id]); // Añadimos el ID como gatillo
+        if (chatEndRef.current) {
+            try {
+                chatEndRef.current.scrollIntoView({
+                    behavior: comportamiento,
+                    block: 'end'
+                });
+            } catch (e) {
+                // Soporte preventivo
+            }
+        }
+    };
+
+    // 2. Efecto Inteligente: Forzar el scroll hacia abajo al abrir, navegar o cambiar de pestaña
+    useEffect(() => {
+        if (modalAbierto && tabDerecha === 0) {
+            prevBitacoraLength.current = bitacora?.length || 0;
+            // Forzar en múltiples fases (inmediato, siguiente frame, y al estabilizarse la animación)
+            hacerScrollAlFondo('auto');
+            const raf = requestAnimationFrame(() => hacerScrollAlFondo('auto'));
+            const t1 = setTimeout(() => hacerScrollAlFondo('auto'), 80);
+            const t2 = setTimeout(() => hacerScrollAlFondo('auto'), 200);
+            const t3 = setTimeout(() => hacerScrollAlFondo('auto'), 350);
+
+            return () => {
+                cancelAnimationFrame(raf);
+                clearTimeout(t1);
+                clearTimeout(t2);
+                clearTimeout(t3);
+            };
+        }
+    }, [modalAbierto, tabDerecha, proyectoSeleccionado?.id]);
+
+    // 3. Scroll suave al añadir un nuevo comentario
+    useEffect(() => {
+        if (modalAbierto && tabDerecha === 0) {
+            const esNuevoComentario = (bitacora?.length || 0) > prevBitacoraLength.current;
+            prevBitacoraLength.current = bitacora?.length || 0;
+
+            if (esNuevoComentario) {
+                const timer = setTimeout(() => hacerScrollAlFondo('smooth'), 60);
+                return () => clearTimeout(timer);
+            }
+        } else {
+            prevBitacoraLength.current = bitacora?.length || 0;
+        }
+    }, [bitacora]);
 
     // 3. Ordenamiento Automático de Tareas (Completadas al fondo)
     const tareasOrdenadas = useMemo(() => {
@@ -72,7 +121,20 @@ export const ExpedienteModal = ({
     if (!proyectoSeleccionado) return null;
 
     return (
-        <Dialog open={modalAbierto} onClose={cerrarFicha} maxWidth="xl" fullWidth sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}>
+        <Dialog
+            open={modalAbierto}
+            onClose={cerrarFicha}
+            maxWidth="xl"
+            fullWidth
+            TransitionProps={{
+                onEntered: () => {
+                    if (tabDerecha === 0) {
+                        hacerScrollAlFondo('auto');
+                    }
+                }
+            }}
+            sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}
+        >
 
             {/* CABECERA */}
             <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, flexShrink: 0 }}>
@@ -225,7 +287,7 @@ export const ExpedienteModal = ({
                                     </IconButton>
                                 </Tooltip>
                             </Box>
-                            <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
+                            <Box ref={bitacoraContainerRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
                                 <List disablePadding>
                                     {bitacora.map((comentario) => {
                                         const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
