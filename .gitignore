@@ -1,6 +1,48 @@
-#Ignorar documentos
+# Ignorar documentos y credenciales
 Documentación/
 .env
 google-credentials.json
+
+# Bases de datos
 *.db
-proelectrica.db
+*.sqlite3
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnp.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# SO y Editores
+.DS_Store
+.vscode/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
