@@ -36,6 +36,13 @@ export const getFechaOrdenamiento = (p) => {
     return p.datos_dinamicos?.fecha_solicitud || p.fecha_programacion || '1970-01-01';
 };
 
+// Las entradas de bitácora nuevas traen la fecha en ISO 8601 UTC (la estampa el servidor); las antiguas, texto local.
+export const formatearFechaBitacora = (fecha) => {
+    if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(fecha)) return fecha || '';
+    const d = new Date(fecha);
+    return isNaN(d.getTime()) ? fecha : d.toLocaleString();
+};
+
 const currentYear = new Date().getFullYear();
 export const defaultStartDate = `${currentYear}-01-01`;
 export const defaultEndDate = `${currentYear}-12-31`;

@@ -1,6 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
-import { createClient } from '@supabase/supabase-js';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
   Box, Button, Divider, TextField, MenuItem, List, ListItem, ListItemText, IconButton, Tabs, Tab, ListItemButton,
@@ -17,33 +16,49 @@ import EventBusyIcon from '@mui/icons-material/EventBusy';
 import EditIcon from '@mui/icons-material/Edit';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 
-// --- IMPORTACIÓN DE MÓDULOS (LA NUEVA ARQUITECTURA) ---
-import { isProyectoApp, getFechaOrdenamiento, EQUIPO_PROELECTRICA, comunInputSx, comunMenuSx, ESTADOS_PROGRESO_BLOQUEADO } from './utils/constants';
+// --- MÓDULOS ---
+import { isProyectoApp, getFechaOrdenamiento, formatearFechaBitacora, EQUIPO_PROELECTRICA, comunInputSx, comunMenuSx, ESTADOS_PROGRESO_BLOQUEADO } from './utils/constants';
 import { LoginScreen } from './views/LoginScreen';
 import { DashboardTab } from './views/DashboardTab';
 import { ExpedienteModal } from './components/ExpedienteModal';
 
-// --- ENTORNO Y CREDENCIALES ---
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+// --- API Y AUTENTICACIÓN ---
+// supabase exportado desde apiClient para compartir instancia con el interceptor
+import { supabase } from './api/apiClient';
+import {
+  useProyectos, useTareasActivas, useTareasProyecto,
+  useActualizarProyecto, useCrearProyecto, useEliminarProyecto,
+  useCrearTarea, useEditarTarea, useCompletarTarea, useAgregarBitacora
+} from './hooks/useProyectos';
+
+// --- GOOGLE ---
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-function App() {
-  // --- ESTADOS GLOBALES ---
+// --- REACT QUERY CLIENT ---
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: true,
+    },
+  },
+});
+
+// =================================================================
+// COMPONENTE INTERNO (necesita acceso a hooks de React Query)
+// =================================================================
+function AppContent() {
+  // --- AUTENTICACIÓN ---
   const [session, setSession] = useState(null);
   const [authCargando, setAuthCargando] = useState(true);
-  const [proyectos, setProyectos] = useState([]);
-  const [todasLasTareas, setTodasLasTareas] = useState([]);
-  const [tareasProyecto, setTareasProyecto] = useState([]);
 
+  // --- NOTIFICACIONES ---
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const mostrarMensaje = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
 
-  // --- CONTROL DE NAVEGACIÓN Y VISTAS ---
+  // --- NAVEGACIÓN Y VISTAS ---
   const [tabActual, setTabActual] = useState(1);
   const [filtroEstado, setFiltroEstado] = useState('Activos');
   const [vistaDashboard, setVistaDashboard] = useState('Gerencia');
@@ -56,14 +71,13 @@ function App() {
   const [tareaEditando, setTareaEditando] = useState(null);
   const [tabDerecha, setTabDerecha] = useState(0);
 
-  // --- ESTADOS DE DATOS ---
+  // --- ESTADO DEL EXPEDIENTE ACTIVO ---
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
   const [estadoGuardado, setEstadoGuardado] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [datosNuevaTarea, setDatosNuevaTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
   const [creandoTarea, setCreandoTarea] = useState(false);
   const [datosEdicionTarea, setDatosEdicionTarea] = useState({ descripcion: '', asignado_a: '', fecha_limite: '' });
-  const [bitacora, setBitacora] = useState([]);
   const [archivos, setArchivos] = useState([]);
   const [datosGC, setDatosGC] = useState({});
   const [datosGuardados, setDatosGuardados] = useState({});
@@ -74,26 +88,57 @@ function App() {
   const tokenClientRef = useRef(null);
   const [pickerCargado, setPickerCargado] = useState(false);
 
-  const estadoActualRef = useRef({ archivos, bitacora, datosGC, proyectoSeleccionado });
-  useEffect(() => { estadoActualRef.current = { archivos, bitacora, datosGC, proyectoSeleccionado }; }, [archivos, bitacora, datosGC, proyectoSeleccionado]);
+  const estadoActualRef = useRef({ archivos, datosGC, proyectoSeleccionado });
+  useEffect(() => { estadoActualRef.current = { archivos, datosGC, proyectoSeleccionado }; }, [archivos, datosGC, proyectoSeleccionado]);
 
-  // --- EFECTOS PRINCIPALES ---
+  // =================================================================
+  // REACT QUERY — Reemplaza cargarProyectos() + setInterval de 60s
+  // =================================================================
+  const sesionActiva = Boolean(session);
+  const { data: proyectos = [] } = useProyectos(sesionActiva);
+  const { data: todasLasTareas = [] } = useTareasActivas(sesionActiva);
+  const { data: tareasProyecto = [] } = useTareasProyecto(proyectoSeleccionado?.id, sesionActiva);
+
+  // Mutations
+  const actualizarProyectoMutation = useActualizarProyecto();
+  const crearProyectoMutation = useCrearProyecto();
+  const eliminarProyectoMutation = useEliminarProyecto();
+  const crearTareaMutation = useCrearTarea(proyectoSeleccionado?.id);
+  const editarTareaMutation = useEditarTarea(proyectoSeleccionado?.id);
+  const completarTareaMutation = useCompletarTarea(proyectoSeleccionado?.id);
+  const agregarBitacoraMutation = useAgregarBitacora();
+
+  // La bitácora vive en el servidor (append-only) y se lee de la caché de React Query: así siempre incluye
+  // las entradas que el servidor agrega por su cuenta (tareas, VBA) y el autoguardado nunca las pisa.
+  const bitacoraEnCache = proyectos.find(p => p.id === proyectoSeleccionado?.id)?.bitacora;
+  const bitacora = useMemo(() => {
+    if (!proyectoSeleccionado) return [];
+    const entradas = bitacoraEnCache ?? proyectoSeleccionado.bitacora;
+    if (entradas?.length > 0) return entradas;
+    // Expedientes antiguos sin ninguna entrada: solo se muestra (no se guarda hasta que haya una real)
+    return [{ id: 1, autor: 'Sistema', texto: 'Registro inicial creado.', fecha: proyectoSeleccionado.datos_dinamicos?.fecha_solicitud || '' }];
+  }, [bitacoraEnCache, proyectoSeleccionado]);
+
+  // --- AUTENTICACIÓN ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthCargando(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthCargando(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) queryClient.clear(); // no dejar en memoria los datos del usuario que salió
+    });
     return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!session) return;
-    cargarProyectos();
-    cargarTodasLasTareas();
     inicializarGoogleAPIs();
     inyectarSolucionZIndex();
-    const intervaloRefresh = setInterval(() => { cargarProyectos(); cargarTodasLasTareas(); }, 60000);
-    return () => clearInterval(intervaloRefresh);
   }, [session]);
 
+  // --- BITÁCORA: SCROLL AUTOMÁTICO ---
   const scrollearBitacoraExpandidaAlFondo = (suave = false) => {
     if (bitacoraExpandidaContainerRef.current) {
       if (suave) {
@@ -117,7 +162,7 @@ function App() {
     }
   }, [bitacoraExpandida, bitacora]);
 
-  // --- LÓGICA DE GOOGLE DRIVE ---
+  // --- GOOGLE DRIVE ---
   const inyectarSolucionZIndex = () => {
     const style = document.createElement('style');
     style.innerHTML = `.picker-dialog { z-index: 100000 !important; } .picker-dialog-bg { z-index: 99999 !important; }`;
@@ -129,11 +174,12 @@ function App() {
       if (window.gapi && window.google) {
         window.gapi.load('picker', () => setPickerCargado(true));
         tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.readonly',
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/drive.readonly',
           callback: (tokenResponse) => {
             if (tokenResponse && tokenResponse.access_token) {
               const expiresIn = (tokenResponse.expires_in || 3600) * 1000;
-              const expiryTime = Date.now() + expiresIn - 300000; // 5 minutos buffer
+              const expiryTime = Date.now() + expiresIn - 300000;
               sessionStorage.setItem('googlePickerToken', JSON.stringify({ token: tokenResponse.access_token, expiry: expiryTime }));
               crearYMostrarPicker(tokenResponse.access_token);
             }
@@ -161,50 +207,52 @@ function App() {
     const viewRecents = new window.google.picker.DocsView(window.google.picker.ViewId.RECENT).setLabel('Recientes');
     const viewDrive = new window.google.picker.DocsView().setIncludeFolders(true).setEnableDrives(true).setLabel('Explorar Drive');
     try {
-      const picker = new window.google.picker.PickerBuilder().addView(viewRecents).addView(viewDrive).enableFeature(window.google.picker.Feature.SUPPORT_DRIVES).enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED).setOAuthToken(accessToken).setDeveloperKey(GOOGLE_API_KEY).setAppId(GOOGLE_APP_ID).setLocale('es').setCallback(manejarArchivoSeleccionado).build();
+      const picker = new window.google.picker.PickerBuilder()
+        .addView(viewRecents).addView(viewDrive)
+        .enableFeature(window.google.picker.Feature.SUPPORT_DRIVES)
+        .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
+        .setOAuthToken(accessToken).setDeveloperKey(GOOGLE_API_KEY)
+        .setAppId(GOOGLE_APP_ID).setLocale('es')
+        .setCallback(manejarArchivoSeleccionado).build();
       picker.setVisible(true);
     } catch (error) { sessionStorage.removeItem('googlePickerToken'); tokenClientRef.current.requestAccessToken(); }
   };
 
   const manejarArchivoSeleccionado = (data) => {
     if (data.action === window.google.picker.Action.PICKED) {
-      const { archivos: currentArchivos, bitacora: currentBitacora, datosGC: currentDatosGC, proyectoSeleccionado: currentProyecto } = estadoActualRef.current;
+      const { archivos: currentArchivos, datosGC: currentDatosGC, proyectoSeleccionado: currentProyecto } = estadoActualRef.current;
       const nuevosArchivos = [...currentArchivos];
-      let textosBitacora = [];
+      const textosBitacora = [];
       data.docs.forEach(doc => { nuevosArchivos.push({ nombre: doc.name, url: doc.url, id: doc.id }); textosBitacora.push(`Adjuntó el archivo: "${doc.name}"`); });
       setArchivos(nuevosArchivos);
-      const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
-      const nuevosLogs = textosBitacora.map((texto, i) => ({ id: Date.now() + i, autor: nombreUsuario, texto, fecha: new Date().toLocaleString() }));
-      const nuevaBitacora = [...currentBitacora, ...nuevosLogs];
-      setBitacora(nuevaBitacora);
-      autoguardarEnBackend(currentDatosGC, nuevaBitacora, nuevosArchivos, currentProyecto);
+      guardarYRegistrar(currentDatosGC, nuevosArchivos, currentProyecto, textosBitacora);
     }
   };
 
   const eliminarArchivo = (archivoAEliminar) => {
     const nuevosArchivos = archivos.filter(a => a.url !== archivoAEliminar.url);
     setArchivos(nuevosArchivos);
-    const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
-    const nuevoLog = { id: Date.now(), autor: nombreUsuario, texto: `Eliminó el archivo adjunto: "${archivoAEliminar.nombre}"`, fecha: new Date().toLocaleString() };
-    const nuevaBitacora = [...bitacora, nuevoLog];
-    setBitacora(nuevaBitacora);
-    autoguardarEnBackend(datosGC, nuevaBitacora, nuevosArchivos, proyectoSeleccionado);
+    guardarYRegistrar(datosGC, nuevosArchivos, proyectoSeleccionado, [`Eliminó el archivo adjunto: "${archivoAEliminar.nombre}"`]);
   };
 
-  // --- LÓGICA DE API (CRUD) ---
-  const cargarProyectos = async () => { try { const respuesta = await axios.get(`${API_URL}/v1/proyectos`); setProyectos(respuesta.data); } catch (error) { console.error(error); } };
-  const cargarTodasLasTareas = async () => { if (!session?.user?.email) return; try { const res = await axios.get(`${API_URL}/v1/tareas/activas`); setTodasLasTareas(res.data); } catch (e) { console.error(e); } };
-  const cargarTareasProyecto = async (id_proyecto) => { try { const res = await axios.get(`${API_URL}/v1/proyectos/${id_proyecto}/tareas`); setTareasProyecto(res.data); } catch (e) { console.error(e); } };
   const cerrarSesion = async () => { await supabase.auth.signOut(); };
 
+  // =================================================================
+  // LÓGICA DE TAREAS
+  // =================================================================
   const handleCrearTarea = async () => {
-    if (!datosNuevaTarea.descripcion || !datosNuevaTarea.asignado_a || !datosNuevaTarea.fecha_limite) return mostrarMensaje("Por favor, completa todos los campos.", "warning");
+    if (!datosNuevaTarea.descripcion || !datosNuevaTarea.asignado_a || !datosNuevaTarea.fecha_limite)
+      return mostrarMensaje("Por favor, completa todos los campos.", "warning");
     setCreandoTarea(true);
     try {
-      const payload = { descripcion: datosNuevaTarea.descripcion, asignado_a: datosNuevaTarea.asignado_a, asignado_por: session.user.email.split('@')[0], correo_asignador: session.user.email, fecha_limite: datosNuevaTarea.fecha_limite };
-      await axios.post(`${API_URL}/v1/proyectos/${proyectoSeleccionado.id}/tareas`, payload);
+      // El backend extrae el autor del JWT — solo enviamos los datos de la tarea
+      const payload = {
+        descripcion: datosNuevaTarea.descripcion,
+        asignado_a: datosNuevaTarea.asignado_a,
+        fecha_limite: datosNuevaTarea.fecha_limite,
+      };
+      await crearTareaMutation.mutateAsync(payload);
       setDatosNuevaTarea({ descripcion: '', asignado_a: '', fecha_limite: '' });
-      cargarTareasProyecto(proyectoSeleccionado.id); cargarProyectos();
       mostrarMensaje("Tarea asignada correctamente.");
     } catch (e) { mostrarMensaje("Error al crear tarea.", "error"); }
     setCreandoTarea(false);
@@ -212,18 +260,25 @@ function App() {
 
   const handleCompletarTarea = async (id_tarea) => {
     try {
-      await axios.put(`${API_URL}/v1/tareas/${id_tarea}/completar`);
-      cargarTodasLasTareas(); if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id); cargarProyectos();
+      await completarTareaMutation.mutateAsync(id_tarea);
       mostrarMensaje("Tarea completada.");
     } catch (e) { mostrarMensaje("Error al completar.", "error"); }
   };
 
   const handleGuardarEdicionTarea = async () => {
-    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite) return mostrarMensaje("Completa todos los campos.", "warning");
+    if (!datosEdicionTarea.descripcion || !datosEdicionTarea.asignado_a || !datosEdicionTarea.fecha_limite)
+      return mostrarMensaje("Completa todos los campos.", "warning");
     try {
-      await axios.put(`${API_URL}/v1/tareas/${tareaEditando.id}`, { ...datosEdicionTarea, modificado_por: session.user.email.split('@')[0] });
-      setTareaEditando(null); cargarTodasLasTareas();
-      if (proyectoSeleccionado) cargarTareasProyecto(proyectoSeleccionado.id); cargarProyectos();
+      // El backend extrae el editor del JWT
+      await editarTareaMutation.mutateAsync({
+        idTarea: tareaEditando.id,
+        payload: {
+          descripcion: datosEdicionTarea.descripcion,
+          asignado_a: datosEdicionTarea.asignado_a,
+          fecha_limite: datosEdicionTarea.fecha_limite,
+        }
+      });
+      setTareaEditando(null);
       mostrarMensaje("Tarea editada.");
     } catch (e) { mostrarMensaje("Error al editar.", "error"); }
   };
@@ -233,6 +288,9 @@ function App() {
     setTareaEditando(tarea);
   };
 
+  // =================================================================
+  // LÓGICA DE EXPEDIENTE
+  // =================================================================
   const formatFechaInput = (dateStr) => {
     if (!dateStr) return '';
     const datePart = dateStr.split(' ')[0].split('T')[0];
@@ -251,22 +309,51 @@ function App() {
 
   const abrirFicha = (proyecto) => {
     if (!proyecto) return;
-    setProyectoSeleccionado(proyecto); cargarTareasProyecto(proyecto.id); setTabDerecha(0);
+    setProyectoSeleccionado(proyecto);
+    setTabDerecha(0);
 
     let colabArray = Array.isArray(proyecto.datos_dinamicos?.colaboradores) ? proyecto.datos_dinamicos.colaboradores : (proyecto.datos_dinamicos?.colaboradores ? [proyecto.datos_dinamicos.colaboradores] : []);
     colabArray = colabArray.filter(c => typeof c === 'string' && c.trim() !== "");
 
     const datosIniciales = {
-      tituloProyecto: proyecto.titulo_proyecto || '', empresaEncargada: proyecto.empresa_encargada || 'Proeléctrica', empresa_solicitante: proyecto.empresa_solicitante || '', correo_solicitante: proyecto.correo_solicitante || '', estado: proyecto.estado || 'Nueva Solicitud', montoCotizado: proyecto.monto_cotizado || '', inspector: proyecto.inspector || '', colaboradores: colabArray, fechaProgramacion: formatFechaInput(proyecto.fecha_programacion), fechaInicio: formatFechaInput(proyecto.fecha_inicio), fechaFin: formatFechaInput(proyecto.fecha_fin), fechaSolicitud: formatFechaInput(proyecto.datos_dinamicos?.fecha_solicitud), seguimiento: proyecto.datos_dinamicos?.seguimiento_inspeccion || '', pago: proyecto.pago || 'Pendiente', cancelacionPago: proyecto.datos_dinamicos?.cancelacion_pago || 'No', progreso: proyecto.progreso || 0, provincia: proyecto.datos_dinamicos?.ubicacion?.provincia || '', canton: proyecto.datos_dinamicos?.ubicacion?.canton || '', distrito: proyecto.datos_dinamicos?.ubicacion?.distrito || '', exacta: proyecto.datos_dinamicos?.ubicacion?.exacta || '', actividad: proyecto.datos_dinamicos?.detalles_tecnicos?.actividad || '', cantidad_permisos: proyecto.datos_dinamicos?.detalles_tecnicos?.cantidad_permisos || '', area_m2: proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '', contactoNombre: proyecto.datos_dinamicos?.contacto?.nombre || '', contactoTelefono: proyecto.datos_dinamicos?.contacto?.telefono || '', propietarioNombre: proyecto.datos_dinamicos?.propietario?.nombre || '', propietarioCedula: proyecto.datos_dinamicos?.propietario?.cedula || '', presupuestoGastos: proyecto.presupuesto_gastos || '', saludProyecto: proyecto.salud_proyecto || 'Saludable', monedaPresupuesto: proyecto.datos_dinamicos?.moneda_presupuesto || 'CRC', monedaCotizacion: proyecto.datos_dinamicos?.moneda_cotizacion || 'CRC', resultadosProyecto: proyecto.datos_dinamicos?.resultados_proyecto || '', talentoRequerido: proyecto.datos_dinamicos?.talento_requerido || [], otroTalento: proyecto.datos_dinamicos?.otro_talento || ''
+      tituloProyecto: proyecto.titulo_proyecto || '', empresaEncargada: proyecto.empresa_encargada || 'Proeléctrica',
+      empresa_solicitante: proyecto.empresa_solicitante || '', correo_solicitante: proyecto.correo_solicitante || '',
+      estado: proyecto.estado || 'Nueva Solicitud', montoCotizado: proyecto.monto_cotizado || '',
+      inspector: proyecto.inspector || '', colaboradores: colabArray,
+      fechaProgramacion: formatFechaInput(proyecto.fecha_programacion),
+      fechaInicio: formatFechaInput(proyecto.fecha_inicio),
+      fechaFin: formatFechaInput(proyecto.fecha_fin),
+      fechaSolicitud: formatFechaInput(proyecto.datos_dinamicos?.fecha_solicitud),
+      seguimiento: proyecto.datos_dinamicos?.seguimiento_inspeccion || '',
+      pago: proyecto.pago || 'Pendiente', cancelacionPago: proyecto.datos_dinamicos?.cancelacion_pago || 'No',
+      progreso: proyecto.progreso || 0,
+      provincia: proyecto.datos_dinamicos?.ubicacion?.provincia || '',
+      canton: proyecto.datos_dinamicos?.ubicacion?.canton || '',
+      distrito: proyecto.datos_dinamicos?.ubicacion?.distrito || '',
+      exacta: proyecto.datos_dinamicos?.ubicacion?.exacta || '',
+      actividad: proyecto.datos_dinamicos?.detalles_tecnicos?.actividad || '',
+      cantidad_permisos: proyecto.datos_dinamicos?.detalles_tecnicos?.cantidad_permisos || '',
+      area_m2: proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '',
+      contactoNombre: proyecto.datos_dinamicos?.contacto?.nombre || '',
+      contactoTelefono: proyecto.datos_dinamicos?.contacto?.telefono || '',
+      propietarioNombre: proyecto.datos_dinamicos?.propietario?.nombre || '',
+      propietarioCedula: proyecto.datos_dinamicos?.propietario?.cedula || '',
+      presupuestoGastos: proyecto.presupuesto_gastos || '', saludProyecto: proyecto.salud_proyecto || 'Saludable',
+      monedaPresupuesto: proyecto.datos_dinamicos?.moneda_presupuesto || 'CRC',
+      monedaCotizacion: proyecto.datos_dinamicos?.moneda_cotizacion || 'CRC',
+      resultadosProyecto: proyecto.datos_dinamicos?.resultados_proyecto || '',
+      talentoRequerido: proyecto.datos_dinamicos?.talento_requerido || [],
+      otroTalento: proyecto.datos_dinamicos?.otro_talento || ''
     };
-    setDatosGC(datosIniciales); setDatosGuardados(datosIniciales);
-    setBitacora(proyecto.bitacora?.length > 0 ? proyecto.bitacora : [{ id: 1, autor: 'Sistema', texto: 'Registro inicial creado.', fecha: proyecto.datos_dinamicos?.fecha_solicitud || new Date().toLocaleString() }]);
-    setArchivos(proyecto.archivos || []); setModalAbierto(true);
+    setDatosGC(datosIniciales);
+    setDatosGuardados(datosIniciales);
+    setArchivos(proyecto.archivos || []);
+    setModalAbierto(true);
   };
 
   const cerrarFicha = () => {
     if (proyectoSeleccionado && JSON.stringify(datosGC) !== JSON.stringify(datosGuardados)) {
-      autoguardarEnBackend(datosGC, bitacora, archivos, proyectoSeleccionado);
+      autoguardarEnBackend(datosGC, archivos, proyectoSeleccionado);
     }
     setModalAbierto(false);
     setProyectoSeleccionado(null);
@@ -277,25 +364,27 @@ function App() {
     if (esProy) {
       if (window.confirm("ATENCIÓN: ¿Estás seguro de que deseas ELIMINAR permanentemente este proyecto? Esta acción borrará todo el expediente y sus tareas. No se puede deshacer.")) {
         try {
-          await axios.delete(`${API_URL}/v1/proyectos/${proyectoSeleccionado.id}`);
+          await eliminarProyectoMutation.mutateAsync(proyectoSeleccionado.id);
           mostrarMensaje("Proyecto eliminado exitosamente.", "success");
-          cerrarFicha(); cargarProyectos();
+          cerrarFicha();
         } catch (error) { mostrarMensaje("Error al eliminar el proyecto.", "error"); }
       }
     } else {
       if (window.confirm("¿Deseas ARCHIVAR esta verificación? (Quedará guardada con estado 'Archivado no adjudicado' para mantener la integridad de los registros).")) {
         const nuevosDatosGC = { ...datosGC, estado: 'Archivado no adjudicado' };
-        const nombreUsuario = session?.user?.email?.split('@')[0] || 'Sistema';
-        const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: "Expediente archivado por la GC para mantener la integridad de los registros.", fecha: new Date().toLocaleString() }];
-        setDatosGC(nuevosDatosGC); setBitacora(nuevaBitacora);
-        autoguardarEnBackend(nuevosDatosGC, nuevaBitacora, archivos, proyectoSeleccionado);
-        mostrarMensaje("Verificación archivada exitosamente.", "success"); cerrarFicha();
+        setDatosGC(nuevosDatosGC);
+        const guardado = await guardarYRegistrar(nuevosDatosGC, archivos, proyectoSeleccionado, ["Expediente archivado por la GC para mantener la integridad de los registros."]);
+        if (!guardado) return;
+        mostrarMensaje("Verificación archivada exitosamente.", "success");
+        cerrarFicha();
       }
     }
   };
 
-  const autoguardarEnBackend = async (nuevosDatosGC, nuevaBitacora, nuevosArchivos, proyectoBase) => {
-    if (!proyectoBase || !proyectoBase.id) return;
+  // Guarda los campos del expediente. Devuelve true si el servidor confirmó el guardado.
+  // La bitácora NO viaja aquí: es append-only y se escribe con guardarYRegistrar / agregarComentario.
+  const autoguardarEnBackend = async (nuevosDatosGC, nuevosArchivos, proyectoBase) => {
+    if (!proyectoBase || !proyectoBase.id) return false;
     setEstadoGuardado('Guardando...');
     try {
       const datosDinamicosActualizados = {
@@ -314,13 +403,13 @@ function App() {
         contacto: { ...(proyectoBase.datos_dinamicos?.contacto || {}), nombre: nuevosDatosGC.contactoNombre, telefono: nuevosDatosGC.contactoTelefono },
         propietario: { ...(proyectoBase.datos_dinamicos?.propietario || {}), nombre: nuevosDatosGC.propietarioNombre, cedula: nuevosDatosGC.propietarioCedula }
       };
+
       const payload = {
         titulo_proyecto: nuevosDatosGC.tituloProyecto,
         empresa_encargada: nuevosDatosGC.empresaEncargada,
         empresa_solicitante: nuevosDatosGC.empresa_solicitante,
         correo_solicitante: nuevosDatosGC.correo_solicitante,
         estado: nuevosDatosGC.estado,
-        seguimiento: nuevosDatosGC.seguimiento,
         monto_cotizado: nuevosDatosGC.montoCotizado,
         pago: nuevosDatosGC.pago,
         inspector: nuevosDatosGC.inspector,
@@ -330,28 +419,49 @@ function App() {
         progreso: Number(nuevosDatosGC.progreso) || 0,
         presupuesto_gastos: nuevosDatosGC.presupuestoGastos,
         salud_proyecto: nuevosDatosGC.saludProyecto,
-        bitacora: nuevaBitacora,
         archivos: nuevosArchivos,
         datos_dinamicos: datosDinamicosActualizados
       };
-      const res = await axios.put(`${API_URL}/v1/proyectos/${proyectoBase.id}/gestion`, payload);
+
+      const res = await actualizarProyectoMutation.mutateAsync({
+        idProyecto: proyectoBase.id,
+        payload
+      });
 
       const proyectoActualizado = {
         ...proyectoBase,
         ...payload,
         datos_dinamicos: datosDinamicosActualizados,
-        ...(res.data?.proyecto || {})
+        ...(res?.proyecto || {}),
       };
       setProyectoSeleccionado(proyectoActualizado);
-      setProyectos(prevProyectos => prevProyectos.map(p => p.id === proyectoBase.id ? proyectoActualizado : p));
 
       setEstadoGuardado('Guardado');
       setTimeout(() => setEstadoGuardado(''), 2000);
+      return true;
     } catch (error) {
       console.error("Error al autoguardar:", error);
       setEstadoGuardado('Error al guardar');
       mostrarMensaje("Hubo un error de conexión al autoguardar.", "error");
+      return false;
     }
+  };
+
+  // Guarda el expediente y, solo si el servidor lo confirmó, deja constancia en la bitácora.
+  // El autor (del JWT) y la fecha los pone el servidor. Devuelve true si el guardado tuvo éxito.
+  const guardarYRegistrar = async (nuevosDatosGC, nuevosArchivos, proyectoBase, textosBitacora = []) => {
+    const guardado = await autoguardarEnBackend(nuevosDatosGC, nuevosArchivos, proyectoBase);
+    if (!guardado) return false;
+    for (const texto of textosBitacora) {
+      try {
+        await agregarBitacoraMutation.mutateAsync({ idProyecto: proyectoBase.id, texto });
+      } catch (error) {
+        console.error("Error al registrar en la bitácora:", error);
+        mostrarMensaje("Se guardó el cambio, pero no se pudo registrar en la bitácora.", "warning");
+        break;
+      }
+    }
+    return true;
   };
 
   const verificarYGuardarCampo = (campo, valorNuevo) => {
@@ -371,39 +481,44 @@ function App() {
     if (campo === 'progreso') valorFormateado = `${valorNuevo}%`;
     if (campo === 'talentoRequerido' || campo === 'colaboradores') valorFormateado = Array.isArray(valorNuevo) ? (valorNuevo.length > 0 ? valorNuevo.join(', ') : 'Ninguno') : valorNuevo;
 
-    const nombreUsuario = session?.user?.email?.split('@')[0] || 'Sistema';
-    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`, fecha: new Date().toLocaleString() }];
+    const textoBitacora = `Cambió ${nombresLegibles[campo] || campo} a: "${valorFormateado}"`;
     const nuevosDatosGC = { ...datosGC, [campo]: valorNuevo, progreso: progresoAjustado };
 
-    setBitacora(nuevaBitacora);
     setDatosGC(nuevosDatosGC);
     setDatosGuardados(nuevosDatosGC);
-    autoguardarEnBackend(nuevosDatosGC, nuevaBitacora, archivos, proyectoSeleccionado);
+    guardarYRegistrar(nuevosDatosGC, archivos, proyectoSeleccionado, [textoBitacora]);
   };
 
   const handleTeclado = (e) => { setDatosGC({ ...datosGC, [e.target.name]: e.target.value }); };
 
-  const agregarComentario = () => {
-    if (nuevoComentario.trim() === '') return;
-    const nombreUsuario = session?.user?.email?.split('@')[0] || 'Usuario';
-    const nuevaBitacora = [...bitacora, { id: Date.now(), autor: nombreUsuario, texto: nuevoComentario, fecha: new Date().toLocaleString() }];
-    setBitacora(nuevaBitacora); setNuevoComentario(''); autoguardarEnBackend(datosGC, nuevaBitacora, archivos, proyectoSeleccionado);
+  const agregarComentario = async () => {
+    if (nuevoComentario.trim() === '' || !proyectoSeleccionado) return;
+    const texto = nuevoComentario;
+    setNuevoComentario('');
+    try {
+      await agregarBitacoraMutation.mutateAsync({ idProyecto: proyectoSeleccionado.id, texto });
+    } catch (error) {
+      console.error("Error al agregar el comentario:", error);
+      setNuevoComentario(texto); // no perder lo escrito
+      mostrarMensaje("No se pudo guardar el comentario.", "error");
+    }
   };
 
   const crearProyectoManual = async () => {
     try {
-      const res = await axios.post(`${API_URL}/v1/proyectos/manual`);
-      const respuestaLista = await axios.get(`${API_URL}/v1/proyectos`);
-      setProyectos(respuestaLista.data);
-      const nuevoProyecto = respuestaLista.data.find(p => p.id === res.data.id_proyecto);
-      if (nuevoProyecto) { abrirFicha(nuevoProyecto); }
+      // El servidor devuelve el proyecto completo; ya quedó en la caché de React Query
+      const res = await crearProyectoMutation.mutateAsync();
+      if (res?.proyecto) abrirFicha(res.proyecto);
     } catch (error) { mostrarMensaje("Error creando proyecto.", "error"); }
   };
 
+  // =================================================================
+  // RENDERS CONDICIONALES
+  // =================================================================
   if (authCargando) return <Box sx={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
   if (!session) return <LoginScreen setSession={setSession} supabase={supabase} />;
 
-  // --- LÓGICA DE FILTRADO Y BÚSQUEDA ---
+  // --- FILTRADO Y BÚSQUEDA ---
   const dataAplicacion = tabActual === 0 ? proyectos.filter(p => !isProyectoApp(p)) : proyectos.filter(p => isProyectoApp(p));
   let listaMostrar = dataAplicacion;
 
@@ -444,23 +559,18 @@ function App() {
     return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
   };
 
-  // --- LÓGICA DE NAVEGACIÓN ENTRE EXPEDIENTES ---
   const indiceActual = proyectoSeleccionado ? listaMostrarOrdenada.findIndex(p => p.id === proyectoSeleccionado.id) : -1;
   const hayAnterior = indiceActual > 0;
   const haySiguiente = indiceActual >= 0 && indiceActual < listaMostrarOrdenada.length - 1;
 
   const handleNavegarExpediente = (direccion) => {
-    if (direccion === 'anterior' && hayAnterior) {
-      abrirFicha(listaMostrarOrdenada[indiceActual - 1]);
-    } else if (direccion === 'siguiente' && haySiguiente) {
-      abrirFicha(listaMostrarOrdenada[indiceActual + 1]);
-    }
+    if (direccion === 'anterior' && hayAnterior) { abrirFicha(listaMostrarOrdenada[indiceActual - 1]); }
+    else if (direccion === 'siguiente' && haySiguiente) { abrirFicha(listaMostrarOrdenada[indiceActual + 1]); }
   };
 
   const tableCellSx = { fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px', py: 1.5 };
   const tableHeadSx = { ...tableCellSx, fontWeight: 'bold', color: '#475569' };
 
-  // Derivados para el Modal
   const NOMBRES_EQUIPO = EQUIPO_PROELECTRICA.map(e => e.nombre);
   const inspectorOpciones = [...new Set([...NOMBRES_EQUIPO, datosGC.inspector])].filter(Boolean);
   const colabOpciones = [...new Set([...NOMBRES_EQUIPO, ...(datosGC.colaboradores || [])])].filter(Boolean);
@@ -502,40 +612,28 @@ function App() {
                 <Chip label={dataAplicacion.length} size="small" sx={{ height: '20px', fontSize: '0.7rem' }} />
               </ListItemButton>
               <Divider />
-
-              <Box sx={{ px: 2, py: 1.5 }}>
-                <Box sx={{ display: 'inline-block', bgcolor: '#8b5cf6', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>COTIZACIONES</Box>
-              </Box>
+              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#8b5cf6', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>COTIZACIONES</Box></Box>
               <ListItemButton selected={filtroEstado === 'Cotizaciones'} onClick={() => setFiltroEstado('Cotizaciones')}>
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#8b5cf6', mr: 1.5 }} />
                 <ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Cotizaciones' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
                 <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Nueva Solicitud", "Oferta Generada", "Cotización"])}</Typography>
               </ListItemButton>
               <Divider />
-
-              <Box sx={{ px: 2, py: 1.5 }}>
-                <Box sx={{ display: 'inline-block', bgcolor: '#dc2626', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>PROYECTOS ACTIVOS</Box>
-              </Box>
+              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#dc2626', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>PROYECTOS ACTIVOS</Box></Box>
               <ListItemButton selected={filtroEstado === 'Activos'} onClick={() => setFiltroEstado('Activos')}>
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#dc2626', mr: 1.5 }} />
                 <ListItemText primary="Mostrar Activos" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Activos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
                 <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"])}</Typography>
               </ListItemButton>
               <Divider />
-
-              <Box sx={{ px: 2, py: 1.5 }}>
-                <Box sx={{ display: 'inline-block', bgcolor: '#d97706', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>FACTURACIÓN Y COBRO</Box>
-              </Box>
+              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#d97706', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>FACTURACIÓN Y COBRO</Box></Box>
               <ListItemButton selected={filtroEstado === 'Facturación'} onClick={() => setFiltroEstado('Facturación')}>
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#d97706', mr: 1.5 }} />
                 <ListItemText primary="Mostrar Pendientes" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Facturación' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
                 <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"])}</Typography>
               </ListItemButton>
               <Divider />
-
-              <Box sx={{ px: 2, py: 1.5 }}>
-                <Box sx={{ display: 'inline-block', bgcolor: '#2563eb', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>ARCHIVADOS</Box>
-              </Box>
+              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#2563eb', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>ARCHIVADOS</Box></Box>
               <ListItemButton selected={filtroEstado === 'Archivados'} onClick={() => setFiltroEstado('Archivados')}>
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#2563eb', mr: 1.5 }} />
                 <ListItemText primary="Mostrar Archivados" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Archivados' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
@@ -573,8 +671,9 @@ function App() {
                   )}
                 </TableHead>
                 <TableBody>
-                  {listaMostrarOrdenada.length === 0 ? <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para esta búsqueda/filtro.</TableCell></TableRow> :
-                    listaMostrarOrdenada.map((proyecto) => (
+                  {listaMostrarOrdenada.length === 0
+                    ? <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para esta búsqueda/filtro.</TableCell></TableRow>
+                    : listaMostrarOrdenada.map((proyecto) => (
                       <TableRow key={proyecto.id} hover style={{ cursor: 'pointer' }} onClick={() => abrirFicha(proyecto)}>
                         {tabActual === 0 ? (
                           <>
@@ -587,7 +686,6 @@ function App() {
                           </>
                         ) : (
                           <>
-                            {/* AQUÍ ESTÁ EL CAMBIO DE COLOR A AZUL INSTITUCIONAL #303092 */}
                             <TableCell sx={{ ...tableCellSx, fontWeight: 'bold', color: '#303092' }}>{proyecto.titulo_proyecto || 'Sin Título'}</TableCell>
                             <TableCell sx={{ ...tableCellSx, fontWeight: 500, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
                             <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
@@ -618,11 +716,10 @@ function App() {
         abrirEdicionTarea={abrirEdicionTarea} handleCompletarTarea={handleCompletarTarea} bitacora={bitacora}
         nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario} agregarComentario={agregarComentario}
         inspectorOpciones={inspectorOpciones} colabOpciones={colabOpciones}
-        // Nuevas propiedades de navegación:
         handleNavegarExpediente={handleNavegarExpediente} hayAnterior={hayAnterior} haySiguiente={haySiguiente}
       />
 
-      {/* MODALES SECUNDARIOS Y SNACKBAR GLOBAL */}
+      {/* MODALES SECUNDARIOS */}
       <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b', py: 1 }}>Editar Tarea</DialogTitle>
         <DialogContent dividers sx={{ py: 1 }}>
@@ -638,16 +735,7 @@ function App() {
         </Box>
       </Dialog>
 
-      <Dialog
-        open={bitacoraExpandida}
-        onClose={() => setBitacoraExpandida(false)}
-        maxWidth="md"
-        fullWidth
-        TransitionProps={{
-          onEntered: () => scrollearBitacoraExpandidaAlFondo(false)
-        }}
-        sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}
-      >
+      <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth TransitionProps={{ onEntered: () => scrollearBitacoraExpandidaAlFondo(false) }} sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
         <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8b5cf6' }}>Bitácora Completa del Expediente</Typography>
           <IconButton onClick={() => setBitacoraExpandida(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
@@ -660,7 +748,7 @@ function App() {
                 <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 1, py: 0 }}>
                   <ListItemAvatar sx={{ minWidth: '50px' }}><Avatar sx={{ width: 40, height: 40, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
                   <ListItemText
-                    primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.5 }}><Typography variant="subtitle2" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary">{comentario.fecha}</Typography></Box>}
+                    primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.5 }}><Typography variant="subtitle2" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary">{formatearFechaBitacora(comentario.fecha)}</Typography></Box>}
                     secondaryTypographyProps={{ component: 'div' }}
                     secondary={<Typography component="div" variant="body1" sx={{ mt: 0.5, color: esSistema ? '#6b7280' : '#1e293b', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', py: esSistema ? 0 : 1, px: esSistema ? 0 : 2, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '8px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{comentario.texto}</Typography>}
                   />
@@ -737,6 +825,17 @@ function App() {
         </Alert>
       </Snackbar>
     </Box>
+  );
+}
+
+// =================================================================
+// COMPONENTE RAÍZ — Envuelve con QueryClientProvider
+// =================================================================
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
   );
 }
 

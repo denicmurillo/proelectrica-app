@@ -20,7 +20,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import {
     comunInputSx, comunMenuSx, EMPRESAS_ENCARGADAS, PROVINCIAS, TALENTO_OPCIONES,
     ESTADOS_PROYECTO, ESTADOS_VERIFICACION, OPCIONES_PAGO, SALUD_OPCIONES,
-    OPCIONES_SINO, SEGUIMIENTO_VERIFICACION, EQUIPO_PROELECTRICA, ESTADOS_PROGRESO_BLOQUEADO
+    OPCIONES_SINO, SEGUIMIENTO_VERIFICACION, EQUIPO_PROELECTRICA, ESTADOS_PROGRESO_BLOQUEADO, formatearFechaBitacora
 } from '../utils/constants';
 
 // --- SUB-COMPONENTES UI INTERNOS ---
@@ -295,7 +295,7 @@ export const ExpedienteModal = ({
                                             <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 0.5, py: 0 }}>
                                                 <ListItemAvatar sx={{ minWidth: '36px' }}><Avatar sx={{ width: 28, height: 28, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ fontSize: 18, color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
                                                 <ListItemText
-                                                    primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{comentario.fecha}</Typography></Box>}
+                                                    primary={<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><Typography variant="caption" fontWeight="bold" color={esSistema ? "textSecondary" : "textPrimary"}>{comentario.autor}</Typography><Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>{formatearFechaBitacora(comentario.fecha)}</Typography></Box>}
                                                     secondaryTypographyProps={{ component: 'div' }}
                                                     secondary={<Typography component="div" variant="body2" sx={{ mt: 0.25, color: esSistema ? '#6b7280' : '#111827', fontStyle: esSistema ? 'italic' : 'normal', backgroundColor: esSistema ? 'transparent' : '#fff', py: esSistema ? 0 : 0.5, px: esSistema ? 0 : 1, border: esSistema ? 'none' : '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', wordBreak: 'break-word' }}>{comentario.texto}</Typography>}
                                                 />
