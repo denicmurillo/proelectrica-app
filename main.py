@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Security, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, Column, Integer, String, JSON, BIGINT, Date, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, JSON, BIGINT, Date, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
 from sqlalchemy.orm.attributes import flag_modified
 from typing import List, Optional
@@ -387,6 +387,22 @@ def registrar_bitacora(proyecto: ProyectoDB, autor: str, texto: str) -> dict:
 # =================================================================
 # 6. ENDPOINTS
 # =================================================================
+
+# --- Salud / monitoreo (público) ---
+
+@app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
+def health(db: Session = Depends(get_db)):
+    """
+    Ruta pública mínima para el "ping" que evita que Render duerma la API (activador de Apps Script)
+    y para monitoreo. Comprueba que la API y la BD responden; no devuelve ningún dato.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        logger.error(f"❌ /health: la BD no responde: {e}")
+        raise HTTPException(status_code=503, detail="Base de datos no disponible.")
+    return {"status": "ok"}
+
 
 # --- Proyectos ---
 
