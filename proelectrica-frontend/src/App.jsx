@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, AppBar, Toolbar,
   Box, Button, Divider, TextField, MenuItem, List, ListItem, ListItemText, IconButton, Tabs, Tab, ListItemButton,
-  CircularProgress, Snackbar, Alert, InputAdornment, Dialog, DialogTitle, DialogContent, ListItemAvatar, Avatar, Tooltip
+  CircularProgress, Snackbar, Alert, InputAdornment, Dialog, DialogTitle, DialogContent, ListItemAvatar, Avatar, Tooltip,
+  Card, CardActionArea, CardContent, useMediaQuery, useTheme
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
@@ -47,9 +48,82 @@ const queryClient = new QueryClient({
 });
 
 // =================================================================
+// FUNCIONES Y COMPONENTES PUROS (fuera de AppContent: se reutilizan
+// tanto en la tabla de escritorio como en la tarjeta móvil)
+// =================================================================
+const formatFechaInput = (dateStr) => {
+  if (!dateStr) return '';
+  const datePart = dateStr.split(' ')[0].split('T')[0];
+  if (datePart.includes('/')) {
+    const parts = datePart.split('/');
+    if (parts[2] && parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    if (parts[0] && parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+  }
+  if (datePart.includes('-')) {
+    const parts = datePart.split('-');
+    if (parts[0].length === 4) return datePart;
+    if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  }
+  return datePart;
+};
+
+const renderizarEstado = (estadoBackend) => {
+  let color = 'default'; const estadoSeguro = estadoBackend || '';
+  if (["Nueva Solicitud", "Oferta Generada", "Cotización"].includes(estadoSeguro)) color = 'warning';
+  if (["Adjudicado", "En progreso", "Revisión", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].some(s => estadoSeguro.includes(s))) color = 'info';
+  if (["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) color = 'primary';
+  if (["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(estadoSeguro)) color = 'success';
+  return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
+};
+
+// Definición de los filtros de la barra lateral, reutilizada por la barra compacta de chips en móvil
+const FILTROS_ESTADO = [
+  { key: 'Todos', label: 'Todos', color: '#64748b', grupo: null },
+  { key: 'Cotizaciones', label: 'Cotizaciones', color: '#8b5cf6', grupo: ["Nueva Solicitud", "Oferta Generada", "Cotización"] },
+  { key: 'Activos', label: 'Activos', color: '#dc2626', grupo: ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"] },
+  { key: 'Facturación', label: 'Facturación', color: '#d97706', grupo: ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"] },
+  { key: 'Archivados', label: 'Archivados', color: '#2563eb', grupo: ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"] },
+];
+
+// Tarjeta de un registro para la vista móvil (< 600px). Misma información que la fila de la tabla de
+// escritorio, en formato vertical. Solo se usa por debajo de 600px; en sm+ se sigue mostrando la tabla.
+const TarjetaRegistro = ({ proyecto, esVerificaciones, onClick }) => (
+  <Card variant="outlined" sx={{ mb: 1.5, borderRadius: '8px', borderColor: '#e2e8f0' }}>
+    <CardActionArea onClick={onClick} sx={{ p: 1.5 }}>
+      <CardContent sx={{ p: '0 !important' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+          <Typography sx={{ fontWeight: 'bold', color: esVerificaciones ? '#0ea5e9' : '#303092', fontSize: '0.9rem', wordBreak: 'break-word' }}>
+            {esVerificaciones ? (proyecto.empresa_solicitante || 'Sin Nombre') : (proyecto.titulo_proyecto || 'Sin Título')}
+          </Typography>
+          {renderizarEstado(proyecto.estado)}
+        </Box>
+        {esVerificaciones ? (
+          <>
+            <Typography variant="body2" color="textSecondary">ID: {proyecto.identificador_solicitud || 'Pendiente'}</Typography>
+            <Typography variant="body2" color="textSecondary">{proyecto.empresa_encargada || 'UVIE Proeléctrica'} · {proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '---'} m²</Typography>
+            {proyecto.fecha_fin && <Typography variant="caption" color="textSecondary">Entrega: {formatFechaInput(proyecto.fecha_fin)}</Typography>}
+          </>
+        ) : (
+          <>
+            <Typography variant="body2" sx={{ color: '#0ea5e9', fontWeight: 500 }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 0.5 }}>
+              <Box sx={{ flexGrow: 1, bgcolor: '#e2e8f0', borderRadius: '4px', height: '6px' }}><Box sx={{ bgcolor: '#0ea5e9', height: '6px', borderRadius: '4px', width: `${proyecto.progreso || 0}%` }} /></Box>
+              <Typography variant="caption" fontWeight="bold">{proyecto.progreso || 0}%</Typography>
+            </Box>
+            <Typography variant="caption" color="textSecondary">Pago: {proyecto.pago || 'Pendiente'} · Admin: {proyecto.inspector || 'Sin asignar'}</Typography>
+          </>
+        )}
+      </CardContent>
+    </CardActionArea>
+  </Card>
+);
+
+// =================================================================
 // COMPONENTE INTERNO (necesita acceso a hooks de React Query)
 // =================================================================
 function AppContent() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   // --- AUTENTICACIÓN ---
   const [session, setSession] = useState(null);
   const [authCargando, setAuthCargando] = useState(true);
@@ -291,22 +365,6 @@ function AppContent() {
   // =================================================================
   // LÓGICA DE EXPEDIENTE
   // =================================================================
-  const formatFechaInput = (dateStr) => {
-    if (!dateStr) return '';
-    const datePart = dateStr.split(' ')[0].split('T')[0];
-    if (datePart.includes('/')) {
-      const parts = datePart.split('/');
-      if (parts[2] && parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      if (parts[0] && parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-    }
-    if (datePart.includes('-')) {
-      const parts = datePart.split('-');
-      if (parts[0].length === 4) return datePart;
-      if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-    return datePart;
-  };
-
   const abrirFicha = (proyecto) => {
     if (!proyecto) return;
     setProyectoSeleccionado(proyecto);
@@ -550,14 +608,6 @@ function AppContent() {
   });
 
   const contarPorGrupo = (grupoEstados) => dataAplicacion.filter(p => p.estado && grupoEstados.some(est => p.estado.includes(est))).length;
-  const renderizarEstado = (estadoBackend) => {
-    let color = 'default'; const estadoSeguro = estadoBackend || '';
-    if (["Nueva Solicitud", "Oferta Generada", "Cotización"].includes(estadoSeguro)) color = 'warning';
-    if (["Adjudicado", "En progreso", "Revisión", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].some(s => estadoSeguro.includes(s))) color = 'info';
-    if (["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) color = 'primary';
-    if (["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(estadoSeguro)) color = 'success';
-    return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
-  };
 
   const indiceActual = proyectoSeleccionado ? listaMostrarOrdenada.findIndex(p => p.id === proyectoSeleccionado.id) : -1;
   const hayAnterior = indiceActual > 0;
@@ -579,20 +629,27 @@ function AppContent() {
   return (
     <Box sx={{ backgroundColor: '#f1f5f9', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AppBar position="static" sx={{ backgroundColor: '#0284c7', boxShadow: 'none' }}>
-        <Toolbar sx={{ minHeight: '60px !important', px: { xs: 2, md: 4, lg: 6 }, display: 'flex', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
-              <img src="/logo.png" alt="Proeléctrica" style={{ height: '38px' }} onError={(e) => { e.target.style.display = 'none'; }} />
+        <Toolbar sx={{ minHeight: '60px !important', px: { xs: 2, md: 4, lg: 6 }, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flexGrow: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mr: { xs: 1, md: 4 }, flexShrink: 0 }}>
+              <Box component="img" src="/logo.png" alt="Proeléctrica" sx={{ height: { xs: '26px', md: '38px' } }} onError={(e) => { e.target.style.display = 'none'; }} />
             </Box>
-            <Tabs value={tabActual} onChange={(e, val) => { setTabActual(val); setBusqueda(''); setFiltroEstado('Activos'); }} textColor="inherit" indicatorColor="secondary" sx={{ minHeight: '60px' }}>
-              <Tab icon={<FactCheckIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
-              <Tab icon={<AccountTreeIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
-              <Tab icon={<DashboardIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', fontWeight: 'bold', textTransform: 'none' }} />
+            {/* En móvil los íconos y el relleno se reducen: la barra es angosta y las 3 pestañas no caben completas */}
+            <Tabs
+              value={tabActual}
+              onChange={(e, val) => { setTabActual(val); setBusqueda(''); setFiltroEstado('Activos'); }}
+              textColor="inherit" indicatorColor="secondary"
+              variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
+              sx={{ minHeight: '60px', minWidth: 0 }}
+            >
+              <Tab icon={!isMobile ? <FactCheckIcon sx={{ fontSize: 20 }} /> : undefined} iconPosition="start" label="Verificaciones" sx={{ minHeight: '60px', minWidth: { xs: 'auto', sm: 90 }, px: { xs: 1.25, sm: 2 }, fontSize: { xs: '0.75rem', sm: '0.875rem' }, fontWeight: 'bold', textTransform: 'none' }} />
+              <Tab icon={!isMobile ? <AccountTreeIcon sx={{ fontSize: 20 }} /> : undefined} iconPosition="start" label="Proyectos" sx={{ minHeight: '60px', minWidth: { xs: 'auto', sm: 90 }, px: { xs: 1.25, sm: 2 }, fontSize: { xs: '0.75rem', sm: '0.875rem' }, fontWeight: 'bold', textTransform: 'none' }} />
+              <Tab icon={!isMobile ? <DashboardIcon sx={{ fontSize: 20 }} /> : undefined} iconPosition="start" label="Actividad Global" sx={{ minHeight: '60px', minWidth: { xs: 'auto', sm: 90 }, px: { xs: 1.25, sm: 2 }, fontSize: { xs: '0.75rem', sm: '0.875rem' }, fontWeight: 'bold', textTransform: 'none' }} />
             </Tabs>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
             <Typography variant="body2" sx={{ mr: 2, fontWeight: 'bold', opacity: 0.9, display: { xs: 'none', md: 'block' } }}>{session.user.email}</Typography>
-            <IconButton color="inherit" onClick={cerrarSesion} title="Cerrar Sesión"><LogoutIcon /></IconButton>
+            <IconButton color="inherit" onClick={cerrarSesion} title="Cerrar Sesión" sx={{ p: { xs: 1, sm: 1.25 } }}><LogoutIcon /></IconButton>
           </Box>
         </Toolbar>
       </AppBar>
@@ -601,7 +658,25 @@ function AppContent() {
         <DashboardTab proyectos={proyectos} vistaDashboard={vistaDashboard} setVistaDashboard={setVistaDashboard} abrirFicha={abrirFicha} todasLasTareas={todasLasTareas} completarTarea={handleCompletarTarea} usuarioActual={session?.user?.email} abrirEdicionTarea={abrirEdicionTarea} />
       ) : (
         <Box sx={{ flexGrow: 1, px: { xs: 2, md: 4, lg: 6 }, py: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
-          <Paper elevation={1} sx={{ width: { xs: '100%', md: '230px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
+          {/* Barra compacta de filtros: solo en teléfonos (< 600px). En sm+ se usa la barra lateral de abajo. */}
+          <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 1, overflowX: 'auto', pb: 0.5, width: '100%' }}>
+            {FILTROS_ESTADO.map(f => (
+              <Chip
+                key={f.key}
+                label={`${f.label} (${f.grupo ? contarPorGrupo(f.grupo) : dataAplicacion.length})`}
+                onClick={() => setFiltroEstado(f.key)}
+                variant={filtroEstado === f.key ? 'filled' : 'outlined'}
+                sx={{
+                  flexShrink: 0, fontWeight: 'bold',
+                  bgcolor: filtroEstado === f.key ? f.color : '#fff',
+                  color: filtroEstado === f.key ? '#fff' : f.color,
+                  borderColor: f.color,
+                }}
+              />
+            ))}
+          </Box>
+
+          <Paper elevation={1} sx={{ display: { xs: 'none', sm: 'block' }, width: { xs: '100%', md: '230px' }, flexShrink: 0, borderRadius: '8px', overflow: 'hidden' }}>
             <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1e293b', fontSize: '0.8rem' }}>VISTAS Y FILTROS</Typography>
             </Box>
@@ -642,64 +717,78 @@ function AppContent() {
             </List>
           </Paper>
 
-          <Paper elevation={1} sx={{ flexGrow: 1, padding: '1.5rem', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Paper elevation={1} sx={{ flexGrow: 1, width: '100%', minWidth: 0, padding: '1.5rem', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1e293b' }}>
                 {tabActual === 0 ? 'Verificaciones Eléctricas' : 'Portafolio de Proyectos'}
               </Typography>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexGrow: 1, justifyContent: 'flex-end' }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', flexGrow: 1, justifyContent: 'flex-end', width: { xs: '100%', sm: 'auto' } }}>
                 <TextField size="small" placeholder="Buscar por cliente, proyecto, ID, estado..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="action" fontSize="small" /></InputAdornment>), }} sx={{ width: { xs: '100%', sm: '350px' }, backgroundColor: '#fff' }} />
                 {tabActual === 1 && (
                   <Button variant="contained" color="primary" size="small" startIcon={<AddIcon />} onClick={crearProyectoManual} sx={{ fontWeight: 'bold', borderRadius: '20px', textTransform: 'none', whiteSpace: 'nowrap' }}>Añadir Proyecto</Button>
                 )}
               </Box>
             </Box>
-            <TableContainer sx={{ overflowX: 'auto' }}>
-              <Table size="small">
-                <TableHead sx={{ backgroundColor: '#f8fafc' }}>
-                  {tabActual === 0 ? (
-                    <TableRow>
-                      <TableCell sx={{ ...tableHeadSx, width: '25%' }}>Cliente / Empresa</TableCell>
-                      <TableCell sx={{ ...tableHeadSx, width: '15%' }}>ID Documento</TableCell>
-                      <TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell>
-                      <TableCell sx={{ ...tableHeadSx, width: '15%' }}>Empresa Encargada</TableCell>
-                      <TableCell sx={{ ...tableHeadSx, width: '10%' }}>Área (m²)</TableCell>
-                      <TableCell sx={{ ...tableHeadSx, width: '15%' }}>Prevista Entrega</TableCell>
-                    </TableRow>
-                  ) : (
-                    <TableRow><TableCell sx={{ ...tableHeadSx, width: '25%' }}>Título del Proyecto</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Cliente</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell><TableCell sx={{ ...tableHeadSx, width: '15%' }}>Progreso</TableCell><TableCell sx={{ ...tableHeadSx, width: '10%' }}>Pago</TableCell><TableCell sx={{ ...tableHeadSx, width: '10%' }}>Admin</TableCell></TableRow>
-                  )}
-                </TableHead>
-                <TableBody>
-                  {listaMostrarOrdenada.length === 0
-                    ? <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para esta búsqueda/filtro.</TableCell></TableRow>
-                    : listaMostrarOrdenada.map((proyecto) => (
-                      <TableRow key={proyecto.id} hover style={{ cursor: 'pointer' }} onClick={() => abrirFicha(proyecto)}>
-                        {tabActual === 0 ? (
-                          <>
-                            <TableCell sx={{ ...tableCellSx, fontWeight: 600, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
-                            <TableCell sx={tableCellSx}>{proyecto.identificador_solicitud || 'Pendiente'}</TableCell>
-                            <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
-                            <TableCell sx={tableCellSx}>{proyecto.empresa_encargada || 'UVIE Proeléctrica'}</TableCell>
-                            <TableCell sx={{ ...tableCellSx, overflow: 'visible' }}>{proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '---'}</TableCell>
-                            <TableCell sx={tableCellSx}>{proyecto.fecha_fin ? formatFechaInput(proyecto.fecha_fin) : '---'}</TableCell>
-                          </>
-                        ) : (
-                          <>
-                            <TableCell sx={{ ...tableCellSx, fontWeight: 'bold', color: '#303092' }}>{proyecto.titulo_proyecto || 'Sin Título'}</TableCell>
-                            <TableCell sx={{ ...tableCellSx, fontWeight: 500, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
-                            <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
-                            <TableCell sx={tableCellSx}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ width: '100%', minWidth: '80px', bgcolor: '#e2e8f0', borderRadius: '4px', height: '6px' }}><Box sx={{ bgcolor: '#0ea5e9', height: '6px', borderRadius: '4px', width: `${proyecto.progreso || 0}%` }} /></Box><Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>{proyecto.progreso || 0}%</Typography></Box></TableCell>
-                            <TableCell sx={tableCellSx}>{proyecto.pago || 'Pendiente'}</TableCell>
-                            <TableCell sx={tableCellSx}>{proyecto.inspector || 'Sin asignar'}</TableCell>
-                          </>
-                        )}
+
+            {/* TABLA: pantallas sm+ (>= 600px), sin cambios respecto a la versión de escritorio */}
+            <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <TableContainer sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead sx={{ backgroundColor: '#f8fafc' }}>
+                    {tabActual === 0 ? (
+                      <TableRow>
+                        <TableCell sx={{ ...tableHeadSx, width: '25%' }}>Cliente / Empresa</TableCell>
+                        <TableCell sx={{ ...tableHeadSx, width: '15%' }}>ID Documento</TableCell>
+                        <TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell>
+                        <TableCell sx={{ ...tableHeadSx, width: '15%' }}>Empresa Encargada</TableCell>
+                        <TableCell sx={{ ...tableHeadSx, width: '10%' }}>Área (m²)</TableCell>
+                        <TableCell sx={{ ...tableHeadSx, width: '15%' }}>Prevista Entrega</TableCell>
                       </TableRow>
-                    ))
-                  }
-                </TableBody>
-              </Table>
-            </TableContainer>
+                    ) : (
+                      <TableRow><TableCell sx={{ ...tableHeadSx, width: '25%' }}>Título del Proyecto</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Cliente</TableCell><TableCell sx={{ ...tableHeadSx, width: '20%' }}>Status</TableCell><TableCell sx={{ ...tableHeadSx, width: '15%' }}>Progreso</TableCell><TableCell sx={{ ...tableHeadSx, width: '10%' }}>Pago</TableCell><TableCell sx={{ ...tableHeadSx, width: '10%' }}>Admin</TableCell></TableRow>
+                    )}
+                  </TableHead>
+                  <TableBody>
+                    {listaMostrarOrdenada.length === 0
+                      ? <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para esta búsqueda/filtro.</TableCell></TableRow>
+                      : listaMostrarOrdenada.map((proyecto) => (
+                        <TableRow key={proyecto.id} hover style={{ cursor: 'pointer' }} onClick={() => abrirFicha(proyecto)}>
+                          {tabActual === 0 ? (
+                            <>
+                              <TableCell sx={{ ...tableCellSx, fontWeight: 600, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
+                              <TableCell sx={tableCellSx}>{proyecto.identificador_solicitud || 'Pendiente'}</TableCell>
+                              <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
+                              <TableCell sx={tableCellSx}>{proyecto.empresa_encargada || 'UVIE Proeléctrica'}</TableCell>
+                              <TableCell sx={{ ...tableCellSx, overflow: 'visible' }}>{proyecto.datos_dinamicos?.detalles_tecnicos?.area_m2 || '---'}</TableCell>
+                              <TableCell sx={tableCellSx}>{proyecto.fecha_fin ? formatFechaInput(proyecto.fecha_fin) : '---'}</TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell sx={{ ...tableCellSx, fontWeight: 'bold', color: '#303092' }}>{proyecto.titulo_proyecto || 'Sin Título'}</TableCell>
+                              <TableCell sx={{ ...tableCellSx, fontWeight: 500, color: '#0ea5e9' }}>{proyecto.empresa_solicitante || 'Sin Nombre'}</TableCell>
+                              <TableCell sx={tableCellSx}>{renderizarEstado(proyecto.estado)}</TableCell>
+                              <TableCell sx={tableCellSx}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ width: '100%', minWidth: '80px', bgcolor: '#e2e8f0', borderRadius: '4px', height: '6px' }}><Box sx={{ bgcolor: '#0ea5e9', height: '6px', borderRadius: '4px', width: `${proyecto.progreso || 0}%` }} /></Box><Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>{proyecto.progreso || 0}%</Typography></Box></TableCell>
+                              <TableCell sx={tableCellSx}>{proyecto.pago || 'Pendiente'}</TableCell>
+                              <TableCell sx={tableCellSx}>{proyecto.inspector || 'Sin asignar'}</TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))
+                    }
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+
+            {/* TARJETAS: solo en teléfonos (< 600px), misma información que la tabla */}
+            <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+              {listaMostrarOrdenada.length === 0
+                ? <Typography align="center" sx={{ py: 4, color: 'gray', fontSize: '0.85rem' }}>No hay registros para esta búsqueda/filtro.</Typography>
+                : listaMostrarOrdenada.map((proyecto) => (
+                  <TarjetaRegistro key={proyecto.id} proyecto={proyecto} esVerificaciones={tabActual === 0} onClick={() => abrirFicha(proyecto)} />
+                ))
+              }
+            </Box>
           </Paper>
         </Box>
       )}
@@ -720,7 +809,7 @@ function AppContent() {
       />
 
       {/* MODALES SECUNDARIOS */}
-      <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth>
+      <Dialog open={Boolean(tareaEditando)} onClose={() => setTareaEditando(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b', py: 1 }}>Editar Tarea</DialogTitle>
         <DialogContent dividers sx={{ py: 1 }}>
           <TextField fullWidth size="small" label="Descripción" value={datosEdicionTarea.descripcion} onChange={(e) => setDatosEdicionTarea({ ...datosEdicionTarea, descripcion: e.target.value })} sx={{ mb: 2, mt: 1, ...comunInputSx }} />
@@ -735,7 +824,7 @@ function AppContent() {
         </Box>
       </Dialog>
 
-      <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth TransitionProps={{ onEntered: () => scrollearBitacoraExpandidaAlFondo(false) }} sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
+      <Dialog open={bitacoraExpandida} onClose={() => setBitacoraExpandida(false)} maxWidth="md" fullWidth fullScreen={isMobile} TransitionProps={{ onEntered: () => scrollearBitacoraExpandidaAlFondo(false) }} sx={{ '& .MuiDialog-paper': { height: { xs: '100%', sm: '80vh' }, maxHeight: { xs: '100%', sm: '80vh' } }, zIndex: 1300 }}>
         <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8b5cf6' }}>Bitácora Completa del Expediente</Typography>
           <IconButton onClick={() => setBitacoraExpandida(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>
@@ -760,7 +849,7 @@ function AppContent() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={tareasExpandidas} onClose={() => setTareasExpandidas(false)} maxWidth="md" fullWidth sx={{ '& .MuiDialog-paper': { height: '80vh', maxHeight: '80vh' }, zIndex: 1300 }}>
+      <Dialog open={tareasExpandidas} onClose={() => setTareasExpandidas(false)} maxWidth="md" fullWidth fullScreen={isMobile} sx={{ '& .MuiDialog-paper': { height: { xs: '100%', sm: '80vh' }, maxHeight: { xs: '100%', sm: '80vh' } }, zIndex: 1300 }}>
         <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', py: 1, px: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#0ea5e9' }}>Panel Completo de Tareas</Typography>
           <IconButton onClick={() => setTareasExpandidas(false)}><Typography variant="body2" fontWeight="bold" color="textSecondary">CERRAR ✕</Typography></IconButton>

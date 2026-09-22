@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, Box, Typography, IconButton, Tooltip,
     TextField, Chip, MenuItem, Slider, Autocomplete, Button, Tabs, Tab, List, ListItem,
-    ListItemText, ListItemAvatar, Avatar
+    ListItemText, ListItemAvatar, Avatar, useMediaQuery, useTheme
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -24,12 +24,14 @@ import {
 } from '../utils/constants';
 
 // --- SUB-COMPONENTES UI INTERNOS ---
+// En móvil (< 600px) la etiqueta se apila arriba del campo en vez de ir a su izquierda a 180px;
+// de sm en adelante el comportamiento es idéntico al original.
 const FilaDato = ({ etiqueta, valor, colorValor = 'textPrimary' }) => (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.5 }}><Box sx={{ width: '180px', flexShrink: 0 }}><Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>{etiqueta}</Typography></Box><Box sx={{ flexGrow: 1 }}><Typography variant="body2" color={colorValor} sx={{ fontWeight: colorValor === 'primary' ? 'bold' : 'normal', color: colorValor === 'textPrimary' ? '#334155' : undefined }}>{valor || '---'}</Typography></Box></Box>
+    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'flex-start' }, mb: 1.5 }}><Box sx={{ width: { xs: '100%', sm: '180px' }, flexShrink: 0 }}><Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>{etiqueta}</Typography></Box><Box sx={{ flexGrow: 1 }}><Typography variant="body2" color={colorValor} sx={{ fontWeight: colorValor === 'primary' ? 'bold' : 'normal', color: colorValor === 'textPrimary' ? '#334155' : undefined }}>{valor || '---'}</Typography></Box></Box>
 );
 
 const FilaEditable = ({ etiqueta, children }) => (
-    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}><Box sx={{ width: '180px', flexShrink: 0 }}><Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>{etiqueta}</Typography></Box><Box sx={{ flexGrow: 1, maxWidth: '500px' }}>{children}</Box></Box>
+    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, mb: 2 }}><Box sx={{ width: { xs: '100%', sm: '180px' }, flexShrink: 0, mb: { xs: 0.5, sm: 0 } }}><Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600 }}>{etiqueta}</Typography></Box><Box sx={{ flexGrow: 1, width: '100%', maxWidth: { xs: '100%', sm: '500px' } }}>{children}</Box></Box>
 );
 
 export const ExpedienteModal = ({
@@ -42,6 +44,9 @@ export const ExpedienteModal = ({
     inspectorOpciones, colabOpciones,
     handleNavegarExpediente, hayAnterior, haySiguiente // Nuevos controles
 }) => {
+
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     // 1. Referencias internas para el Auto-Scroll de la bitácora
     const bitacoraContainerRef = useRef(null);
@@ -126,6 +131,7 @@ export const ExpedienteModal = ({
             onClose={cerrarFicha}
             maxWidth="xl"
             fullWidth
+            fullScreen={isMobile}
             TransitionProps={{
                 onEntered: () => {
                     if (tabDerecha === 0) {
@@ -133,13 +139,13 @@ export const ExpedienteModal = ({
                     }
                 }
             }}
-            sx={{ '& .MuiDialog-paper': { height: '85vh', maxHeight: '85vh', borderRadius: '8px', display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}
+            sx={{ '& .MuiDialog-paper': { height: { xs: '100%', sm: '85vh' }, maxHeight: { xs: '100%', sm: '85vh' }, borderRadius: { xs: 0, sm: '8px' }, display: 'flex', flexDirection: 'column' }, zIndex: 1200 }}
         >
 
             {/* CABECERA */}
-            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, flexShrink: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
+            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, py: 1, flexShrink: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontWeight: 'bold', color: '#1e293b', fontSize: { xs: '1.1rem', sm: '1.5rem' } }}>{esVistaProyecto ? 'Expediente de Proyecto' : 'Expediente de Verificación'}</Typography>
                     {estadoGuardado && <Typography variant="caption" color={estadoGuardado.includes('Error') ? 'error' : 'textSecondary'} sx={{ fontStyle: 'italic', fontWeight: 'bold' }}>{estadoGuardado}</Typography>}
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -153,10 +159,10 @@ export const ExpedienteModal = ({
             </DialogTitle>
 
             {/* CUERPO DEL MODAL (Con posición relativa para las flechas de navegación) */}
-            <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden', position: 'relative' }}>
+            <DialogContent sx={{ padding: 0, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, overflowY: { xs: 'auto', md: 'hidden' }, position: 'relative' }}>
 
-                {/* FLECHAS DE NAVEGACIÓN ESTILO PODIO */}
-                {hayAnterior && (
+                {/* FLECHAS DE NAVEGACIÓN ESTILO PODIO (ocultas en móvil: no hay espacio y estorbarían al formulario) */}
+                {hayAnterior && !isMobile && (
                     <Tooltip title="Expediente Anterior" placement="right">
                         <IconButton
                             onClick={() => handleNavegarExpediente('anterior')}
@@ -167,7 +173,7 @@ export const ExpedienteModal = ({
                     </Tooltip>
                 )}
 
-                {haySiguiente && (
+                {haySiguiente && !isMobile && (
                     <Tooltip title="Siguiente Expediente" placement="left">
                         <IconButton
                             onClick={() => handleNavegarExpediente('siguiente')}
@@ -179,7 +185,7 @@ export const ExpedienteModal = ({
                 )}
 
                 {/* COLUMNA IZQUIERDA: FORMULARIO */}
-                <Box sx={{ flexGrow: 1, overflowY: 'auto', py: '0.5rem', pl: '4rem', pr: '2rem', backgroundColor: '#fff', minHeight: 0 }}>
+                <Box sx={{ flexGrow: { xs: 0, md: 1 }, overflowY: { xs: 'visible', md: 'auto' }, py: '0.5rem', pl: { xs: 2, md: '4rem' }, pr: { xs: 2, md: '2rem' }, backgroundColor: '#fff', minHeight: { xs: 'auto', md: 0 } }}>
                     <Box sx={{ mb: 2 }}><Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', mb: 2, letterSpacing: '0.5px', mt: 1 }}>Información del Cliente y Ubicación</Typography><Box sx={{ pl: 1 }}>
                         {esVistaProyecto && <FilaEditable etiqueta="Título del Proyecto"><TextField fullWidth size="small" variant="standard" name="tituloProyecto" value={datosGC.tituloProyecto} onChange={handleTeclado} onBlur={(e) => verificarYGuardarCampo('tituloProyecto', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} InputProps={{ disableUnderline: true }} sx={{ '& .MuiInputBase-input': { fontWeight: 'bold', color: '#303092', fontSize: '1rem' } }} /></FilaEditable>}
                         {esVistaProyecto ? <FilaEditable etiqueta="Empresa Encargada"><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, py: 0.5 }}>{EMPRESAS_ENCARGADAS.map(empresa => (<Chip key={empresa} label={empresa} onClick={() => verificarYGuardarCampo('empresaEncargada', empresa)} color={datosGC.empresaEncargada === empresa ? "primary" : "default"} variant={datosGC.empresaEncargada === empresa ? "filled" : "outlined"} sx={{ borderRadius: '4px', fontWeight: datosGC.empresaEncargada === empresa ? 'bold' : 'normal', cursor: 'pointer' }} />))}</Box></FilaEditable> : <FilaDato etiqueta="Empresa Encargada" valor="UVIE Proeléctrica" colorValor="primary" />}
@@ -216,7 +222,7 @@ export const ExpedienteModal = ({
                 </Box>
 
                 {/* COLUMNA DERECHA: PESTAÑAS Y CONTENIDO (TAREAS Y BITÁCORA) */}
-                <Box sx={{ width: '500px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e2e8f0', backgroundColor: '#f8fafc', pr: '2rem' }}>
+                <Box sx={{ width: { xs: '100%', md: '500px' }, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: { xs: 'none', md: '1px solid #e2e8f0' }, borderTop: { xs: '1px solid #e2e8f0', md: 'none' }, backgroundColor: '#f8fafc', pr: { xs: 0, md: '2rem' } }}>
                     <Tabs value={tabDerecha} onChange={(e, val) => setTabDerecha(val)} variant="fullWidth" sx={{ minHeight: '48px', borderBottom: '1px solid #e2e8f0', bgcolor: '#fff' }}>
                         <Tab label="Bitácora y Actividad" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 0 ? '#303092 !important' : 'text.secondary' }} />
                         <Tab label="Tareas del Proyecto" sx={{ fontWeight: 'bold', textTransform: 'none', color: tabDerecha === 1 ? '#0ea5e9 !important' : 'text.secondary' }} />
@@ -224,7 +230,7 @@ export const ExpedienteModal = ({
 
                     {/* CONTENIDO PESTAÑA 1: TAREAS (AHORA ORDENADAS) */}
                     {tabDerecha === 1 && (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: { xs: 0, md: 1 }, overflow: { xs: 'visible', md: 'hidden' } }}>
                             <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="subtitle1" sx={{ color: '#0ea5e9', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestión de Tareas</Typography>
                                 <Tooltip title="Expandir Tareas">
@@ -235,7 +241,7 @@ export const ExpedienteModal = ({
                             </Box>
                             <Box sx={{ py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
                                 <TextField fullWidth size="small" label="Describir tarea o inspección..." value={datosNuevaTarea.descripcion} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, descripcion: e.target.value })} sx={{ mb: 1, ...comunInputSx }} />
-                                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, gap: 1, mb: 1 }}>
                                     <TextField select fullWidth size="small" label="Asignar a" value={datosNuevaTarea.asignado_a} onChange={(e) => setDatosNuevaTarea({ ...datosNuevaTarea, asignado_a: e.target.value })} sx={comunInputSx}>
                                         {EQUIPO_PROELECTRICA.map(miembro => <MenuItem key={miembro.correo} value={miembro.correo} sx={comunMenuSx}>{miembro.nombre}</MenuItem>)}
                                     </TextField>
@@ -246,7 +252,7 @@ export const ExpedienteModal = ({
                                 </Button>
                             </Box>
 
-                            <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
+                            <Box sx={{ flexGrow: { xs: 0, md: 1 }, overflowY: { xs: 'visible', md: 'auto' }, p: 2, minHeight: { xs: 'auto', md: 0 } }}>
                                 {tareasOrdenadas.length === 0 ? (
                                     <Typography variant="body2" color="textSecondary" align="center" sx={{ mt: 2 }}>No hay tareas asignadas a este proyecto.</Typography>
                                 ) : (
@@ -278,7 +284,7 @@ export const ExpedienteModal = ({
 
                     {/* CONTENIDO PESTAÑA 0: BITÁCORA */}
                     {tabDerecha === 0 && (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: { xs: 0, md: 1 }, overflow: { xs: 'visible', md: 'hidden' } }}>
                             <Box sx={{ flexShrink: 0, py: 1, px: 2, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="subtitle1" sx={{ color: '#303092', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historial del Expediente</Typography>
                                 <Tooltip title="Expandir Bitácora">
@@ -287,7 +293,7 @@ export const ExpedienteModal = ({
                                     </IconButton>
                                 </Tooltip>
                             </Box>
-                            <Box ref={bitacoraContainerRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 2, minHeight: 0 }}>
+                            <Box ref={bitacoraContainerRef} sx={{ flexGrow: { xs: 0, md: 1 }, overflowY: { xs: 'visible', md: 'auto' }, p: 2, minHeight: { xs: 'auto', md: 0 } }}>
                                 <List disablePadding>
                                     {bitacora.map((comentario) => {
                                         const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';

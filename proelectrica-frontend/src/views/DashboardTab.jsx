@@ -214,12 +214,14 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
         <Box sx={{ p: { xs: 2, md: 4 }, flexGrow: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexWrap: 'wrap', gap: 2 }}>
                 <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1e293b' }}>Panel Estratégico Interactivo</Typography>
-                <ToggleButtonGroup color="primary" value={vistaDashboard} exclusive onChange={(e, val) => { if (val) setVistaDashboard(val); }} size="small" sx={{ backgroundColor: '#fff' }}>
-                    <ToggleButton value="Gerencia" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>Gerencia</ToggleButton>
-                    <ToggleButton value="PMO" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>PMO</ToggleButton>
-                    <ToggleButton value="GC" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>Calidad (GC)</ToggleButton>
-                    <ToggleButton value="Operativo" sx={{ px: 3, fontWeight: 'bold', textTransform: 'none' }}>Operativo</ToggleButton>
-                </ToggleButtonGroup>
+                <Box sx={{ maxWidth: '100%', overflowX: 'auto' }}>
+                    <ToggleButtonGroup color="primary" value={vistaDashboard} exclusive onChange={(e, val) => { if (val) setVistaDashboard(val); }} size="small" sx={{ backgroundColor: '#fff' }}>
+                        <ToggleButton value="Gerencia" sx={{ px: { xs: 1.5, sm: 3 }, fontWeight: 'bold', textTransform: 'none', whiteSpace: 'nowrap' }}>Gerencia</ToggleButton>
+                        <ToggleButton value="PMO" sx={{ px: { xs: 1.5, sm: 3 }, fontWeight: 'bold', textTransform: 'none', whiteSpace: 'nowrap' }}>PMO</ToggleButton>
+                        <ToggleButton value="GC" sx={{ px: { xs: 1.5, sm: 3 }, fontWeight: 'bold', textTransform: 'none', whiteSpace: 'nowrap' }}>Calidad (GC)</ToggleButton>
+                        <ToggleButton value="Operativo" sx={{ px: { xs: 1.5, sm: 3 }, fontWeight: 'bold', textTransform: 'none', whiteSpace: 'nowrap' }}>Operativo</ToggleButton>
+                    </ToggleButtonGroup>
+                </Box>
             </Box>
 
             {/* ========================================================================= */}

@@ -16,8 +16,8 @@ export const LoginScreen = ({ setSession, supabase }) => {
     };
 
     return (
-        <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
-            <Paper elevation={3} sx={{ p: 5, maxWidth: '400px', width: '100%', borderRadius: '12px', textAlign: 'center' }}>
+        <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', px: 2 }}>
+            <Paper elevation={3} sx={{ p: { xs: 3, sm: 5 }, maxWidth: '400px', width: '100%', borderRadius: '12px', textAlign: 'center' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}><img src="/logo.png" alt="Proeléctrica" style={{ height: '60px' }} onError={(e) => { e.target.style.display = 'none'; }} /></Box>
                 <Typography variant="h5" fontWeight="bold" color="#1e293b" gutterBottom>Acceso al Sistema</Typography>
                 <Typography variant="body2" color="textSecondary" mb={4}>Ingresa tus credenciales corporativas</Typography>
