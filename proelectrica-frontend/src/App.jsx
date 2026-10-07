@@ -67,23 +67,43 @@ const formatFechaInput = (dateStr) => {
   return datePart;
 };
 
-const renderizarEstado = (estadoBackend) => {
-  let color = 'default'; const estadoSeguro = estadoBackend || '';
-  if (["Nueva Solicitud", "Oferta Generada", "Cotización"].includes(estadoSeguro)) color = 'warning';
-  if (["Adjudicado", "En progreso", "Revisión", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].some(s => estadoSeguro.includes(s))) color = 'info';
-  if (["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(estadoSeguro)) color = 'primary';
-  if (["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(estadoSeguro)) color = 'success';
-  return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
+// Normaliza texto eliminando acentos, espacios en blanco y pasando a minúsculas
+export const normalizarEstado = (txt) =>
+  (txt || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+// Definición unificada de filtros de la barra lateral y chips móviles (Fuente única de verdad)
+export const FILTROS_ESTADO = [
+  { key: 'Todos', label: 'Todos', primaryText: 'Todos los registros', color: '#64748b', grupo: null, categoria: null },
+  { key: 'Cotizaciones', label: 'Cotizaciones', primaryText: 'Mostrar Cotizaciones', color: '#8b5cf6', categoria: 'COTIZACIONES', grupo: ["Nueva Solicitud", "Oferta Generada", "Solicitud Generada", "Cotización", "Cotizacion"] },
+  { key: 'Activos', label: 'Activos', primaryText: 'Mostrar Activos', color: '#dc2626', categoria: 'PROYECTOS ACTIVOS', grupo: ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"] },
+  { key: 'Facturación', label: 'Facturación', primaryText: 'Mostrar Pendientes', color: '#d97706', categoria: 'FACTURACIÓN Y COBRO', grupo: ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"] },
+  { key: 'Archivados', label: 'Archivados', primaryText: 'Mostrar Archivados', color: '#2563eb', categoria: 'ARCHIVADOS', grupo: ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"] },
+];
+
+// Comprueba si un proyecto pertenece a un grupo de estados dado con tolerancia a tildes, mayúsculas y espacios
+export const proyectoPerteneceAGrupo = (proyecto, grupo) => {
+  if (!grupo) return true;
+  // Si en verificaciones viene sin estado, por regla de negocio es 'Nueva Solicitud'
+  const estadoRaw = proyecto?.estado?.trim() || (!isProyectoApp(proyecto) ? 'Nueva Solicitud' : '');
+  if (!estadoRaw) return false;
+  const estadoNorm = normalizarEstado(estadoRaw);
+  return grupo.some(est => normalizarEstado(est) === estadoNorm);
 };
 
-// Definición de los filtros de la barra lateral, reutilizada por la barra compacta de chips en móvil
-const FILTROS_ESTADO = [
-  { key: 'Todos', label: 'Todos', color: '#64748b', grupo: null },
-  { key: 'Cotizaciones', label: 'Cotizaciones', color: '#8b5cf6', grupo: ["Nueva Solicitud", "Oferta Generada", "Cotización"] },
-  { key: 'Activos', label: 'Activos', color: '#dc2626', grupo: ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"] },
-  { key: 'Facturación', label: 'Facturación', color: '#d97706', grupo: ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"] },
-  { key: 'Archivados', label: 'Archivados', color: '#2563eb', grupo: ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"] },
-];
+const renderizarEstado = (estadoBackend) => {
+  const estadoSeguro = (estadoBackend || '').trim();
+  const estadoNorm = normalizarEstado(estadoSeguro);
+  let color = 'default';
+  if (FILTROS_ESTADO.find(f => f.key === 'Cotizaciones')?.grupo?.some(e => normalizarEstado(e) === estadoNorm)) color = 'warning';
+  else if (FILTROS_ESTADO.find(f => f.key === 'Activos')?.grupo?.some(e => normalizarEstado(e) === estadoNorm)) color = 'info';
+  else if (FILTROS_ESTADO.find(f => f.key === 'Facturación')?.grupo?.some(e => normalizarEstado(e) === estadoNorm)) color = 'primary';
+  else if (FILTROS_ESTADO.find(f => f.key === 'Archivados')?.grupo?.some(e => normalizarEstado(e) === estadoNorm)) color = 'success';
+  return <Chip label={estadoSeguro || 'Sin Estado'} color={color} size="small" sx={{ fontWeight: 'bold', fontSize: '0.75rem', height: '24px' }} />;
+};
 
 // Tarjeta de un registro para la vista móvil (< 600px). Misma información que la fila de la tabla de
 // escritorio, en formato vertical. Solo se usa por debajo de 600px; en sm+ se sigue mostrando la tabla.
@@ -581,10 +601,10 @@ function AppContent() {
   let listaMostrar = dataAplicacion;
 
   if (filtroEstado !== 'Todos') {
-    if (filtroEstado === 'Cotizaciones') listaMostrar = dataAplicacion.filter(p => p.estado && ["Nueva Solicitud", "Oferta Generada", "Cotización"].includes(p.estado));
-    else if (filtroEstado === 'Activos') listaMostrar = dataAplicacion.filter(p => p.estado && ["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"].includes(p.estado));
-    else if (filtroEstado === 'Facturación') listaMostrar = dataAplicacion.filter(p => p.estado && ["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"].includes(p.estado));
-    else if (filtroEstado === 'Archivados') listaMostrar = dataAplicacion.filter(p => p.estado && ["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"].includes(p.estado));
+    const grupoActual = FILTROS_ESTADO.find(f => f.key === filtroEstado)?.grupo;
+    if (grupoActual) {
+      listaMostrar = dataAplicacion.filter(p => proyectoPerteneceAGrupo(p, grupoActual));
+    }
   }
 
   if (busqueda.trim() !== '') {
@@ -607,7 +627,7 @@ function AppContent() {
     return b.id - a.id;
   });
 
-  const contarPorGrupo = (grupoEstados) => dataAplicacion.filter(p => p.estado && grupoEstados.some(est => p.estado.includes(est))).length;
+  const contarPorGrupo = (grupoEstados) => dataAplicacion.filter(p => proyectoPerteneceAGrupo(p, grupoEstados)).length;
 
   const indiceActual = proyectoSeleccionado ? listaMostrarOrdenada.findIndex(p => p.id === proyectoSeleccionado.id) : -1;
   const hayAnterior = indiceActual > 0;
@@ -681,39 +701,31 @@ function AppContent() {
               <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#1e293b', fontSize: '0.8rem' }}>VISTAS Y FILTROS</Typography>
             </Box>
             <List dense disablePadding>
-              <ListItemButton selected={filtroEstado === 'Todos'} onClick={() => setFiltroEstado('Todos')}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#64748b', mr: 1.5 }} />
-                <ListItemText primary="Todos los registros" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Todos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
-                <Chip label={dataAplicacion.length} size="small" sx={{ height: '20px', fontSize: '0.7rem' }} />
-              </ListItemButton>
-              <Divider />
-              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#8b5cf6', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>COTIZACIONES</Box></Box>
-              <ListItemButton selected={filtroEstado === 'Cotizaciones'} onClick={() => setFiltroEstado('Cotizaciones')}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#8b5cf6', mr: 1.5 }} />
-                <ListItemText primary="Mostrar Cotizaciones" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Cotizaciones' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Nueva Solicitud", "Oferta Generada", "Cotización"])}</Typography>
-              </ListItemButton>
-              <Divider />
-              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#dc2626', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>PROYECTOS ACTIVOS</Box></Box>
-              <ListItemButton selected={filtroEstado === 'Activos'} onClick={() => setFiltroEstado('Activos')}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#dc2626', mr: 1.5 }} />
-                <ListItemText primary="Mostrar Activos" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Activos' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Adjudicado", "En progreso", "Revisión por parte del cliente", "Asignado y programado", "Elaboración de informe", "En revisión del Verificador", "Adjudicado y pagado"])}</Typography>
-              </ListItemButton>
-              <Divider />
-              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#d97706', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>FACTURACIÓN Y COBRO</Box></Box>
-              <ListItemButton selected={filtroEstado === 'Facturación'} onClick={() => setFiltroEstado('Facturación')}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#d97706', mr: 1.5 }} />
-                <ListItemText primary="Mostrar Pendientes" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Facturación' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Completado y listo para facturar", "Facturado y pendiente de pago", "Pendiente de pago"])}</Typography>
-              </ListItemButton>
-              <Divider />
-              <Box sx={{ px: 2, py: 1.5 }}><Box sx={{ display: 'inline-block', bgcolor: '#2563eb', color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>ARCHIVADOS</Box></Box>
-              <ListItemButton selected={filtroEstado === 'Archivados'} onClick={() => setFiltroEstado('Archivados')}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#2563eb', mr: 1.5 }} />
-                <ListItemText primary="Mostrar Archivados" sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === 'Archivados' ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
-                <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{contarPorGrupo(["Pago recibido y proyecto archivado", "No se ejecutó. Proyecto archivado", "Archivado no adjudicado", "Finalizado y entregado"])}</Typography>
-              </ListItemButton>
+              {FILTROS_ESTADO.map((f) => (
+                <Box key={f.key}>
+                  {f.categoria && (
+                    <>
+                      <Divider />
+                      <Box sx={{ px: 2, py: 1.5 }}>
+                        <Box sx={{ display: 'inline-block', bgcolor: f.color, color: '#fff', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                          {f.categoria}
+                        </Box>
+                      </Box>
+                    </>
+                  )}
+                  <ListItemButton selected={filtroEstado === f.key} onClick={() => setFiltroEstado(f.key)}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: f.color, mr: 1.5 }} />
+                    <ListItemText primary={f.primaryText} sx={{ '& .MuiListItemText-primary': { color: '#1e293b', fontWeight: filtroEstado === f.key ? 'bold' : 'normal', fontSize: '0.85rem' } }} />
+                    {f.key === 'Todos' ? (
+                      <Chip label={dataAplicacion.length} size="small" sx={{ height: '20px', fontSize: '0.7rem' }} />
+                    ) : (
+                      <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {contarPorGrupo(f.grupo)}
+                      </Typography>
+                    )}
+                  </ListItemButton>
+                </Box>
+              ))}
             </List>
           </Paper>
 
