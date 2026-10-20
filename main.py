@@ -15,9 +15,13 @@ import requests
 import time
 import os
 import logging
+import base64
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
-# --- LIBRERÍAS DE GOOGLE CALENDAR ---
+# --- LIBRERÍAS DE GOOGLE (GMAIL / CALENDAR) ---
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -181,16 +185,90 @@ class EntradaBitacora(BaseModel):
 
 
 # =================================================================
-# 3. MOTOR DE GOOGLE CALENDAR
+# 3. NOTIFICACIONES POR CORREO ELECTRÓNICO (TAREAS ASIGNADAS)
 # =================================================================
-def crear_evento_calendario(
+def enviar_correo_tarea(
     titulo_proyecto: str,
     descripcion: str,
-    correo_invitado: str,
-    fecha: str,
+    correo_destinatario: str,
+    fecha_limite: str,
+    nombre_asignador: str,
     correo_asignador: str
 ):
-    SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+    """
+    Envía un correo electrónico notificando la asignación de una tarea al usuario responsable.
+    Prioriza Gmail API (Google Workspace con delegación de dominio).
+    Si no está disponible o falla, utiliza SMTP si está configurado en el entorno.
+    """
+    asunto = f"Nueva tarea asignada: {descripcion}"
+
+    cuerpo_texto = f"""Hola,
+
+Se te ha asignado una nueva tarea en Proeléctrica PMO:
+
+• Proyecto: {titulo_proyecto}
+• Tarea: {descripcion}
+• Fecha límite: {fecha_limite}
+• Asignado por: {nombre_asignador} ({correo_asignador})
+
+Por favor ingresa al sistema para consultar los detalles y dar seguimiento.
+"""
+
+    cuerpo_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }}
+        .container {{ max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; }}
+        .header {{ background-color: #303092; padding: 20px; text-align: center; color: #ffffff; }}
+        .header h2 {{ margin: 0; font-size: 1.25rem; font-weight: 700; }}
+        .content {{ padding: 24px; }}
+        .card {{ background-color: #f1f5f9; border-radius: 6px; padding: 16px; margin: 16px 0; border-left: 4px solid #0ea5e9; }}
+        .field {{ margin-bottom: 12px; }}
+        .field:last-child {{ margin-bottom: 0; }}
+        .label {{ font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 2px; }}
+        .value {{ font-size: 0.95rem; color: #0f172a; font-weight: 600; }}
+        .desc-value {{ font-size: 1rem; color: #1e293b; font-weight: 500; white-space: pre-wrap; }}
+        .footer {{ padding: 16px 24px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; text-align: center; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Proeléctrica PMO — Nueva Tarea Asignada</h2>
+        </div>
+        <div class="content">
+            <p>Hola,</p>
+            <p>Se te ha asignado una nueva tarea para tu atención y seguimiento:</p>
+            <div class="card">
+                <div class="field">
+                    <div class="label">Proyecto</div>
+                    <div class="value">{titulo_proyecto}</div>
+                </div>
+                <div class="field" style="margin-top: 12px;">
+                    <div class="label">Tarea / Inspección</div>
+                    <div class="desc-value">{descripcion}</div>
+                </div>
+                <div class="field" style="margin-top: 12px;">
+                    <div class="label">Fecha Límite</div>
+                    <div class="value" style="color: #d97706;">{fecha_limite}</div>
+                </div>
+                <div class="field" style="margin-top: 12px;">
+                    <div class="label">Asignado por</div>
+                    <div class="value">{nombre_asignador} ({correo_asignador})</div>
+                </div>
+            </div>
+            <p style="font-size: 0.875rem; color: #64748b;">Por favor ingresa a la plataforma para gestionar y completar la tarea una vez finalizada.</p>
+        </div>
+        <div class="footer">
+            Mensaje automático generado por el Sistema de Administración de Proyectos Proeléctrica PMO.
+        </div>
+    </div>
+</body>
+</html>
+"""
+
     rutas_posibles = [
         '/etc/secrets/google-credentials.json',
         '/opt/render/project/src/google-credentials.json',
@@ -203,29 +281,67 @@ def crear_evento_calendario(
             SERVICE_ACCOUNT_FILE = ruta
             break
 
-    if not SERVICE_ACCOUNT_FILE:
-        return None
+    enviado = False
 
-    try:
-        creds = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE, scopes=SCOPES
-        ).with_subject(correo_asignador)
-        service = build('calendar', 'v3', credentials=creds)
-        evento = {
-            'summary': f"Inspección/Tarea: {titulo_proyecto}",
-            'description': f"Tarea asignada desde Proeléctrica PMO:\n\n{descripcion}",
-            'start': {'date': fecha},
-            'end': {'date': fecha},
-            'attendees': [{'email': correo_invitado}],
-            'reminders': {'useDefault': False},
-        }
-        evento_creado = service.events().insert(
-            calendarId='primary', body=evento, sendUpdates='all'
-        ).execute()
-        return evento_creado.get('htmlLink')
-    except Exception as e:
-        logger.error(f"❌ Error al crear el evento de Google Calendar: {e}")
-        return None
+    # 1. Intentar envío mediante Google Workspace (Gmail API con delegación de dominio)
+    if SERVICE_ACCOUNT_FILE and correo_asignador:
+        try:
+            SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+            creds = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE, scopes=SCOPES
+            ).with_subject(correo_asignador)
+            service = build('gmail', 'v1', credentials=creds)
+
+            msg = MIMEMultipart('alternative')
+            msg['To'] = correo_destinatario
+            msg['From'] = correo_asignador
+            msg['Subject'] = asunto
+            msg.attach(MIMEText(cuerpo_texto, 'plain', 'utf-8'))
+            msg.attach(MIMEText(cuerpo_html, 'html', 'utf-8'))
+
+            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+            service.users().messages().send(userId='me', body={'raw': raw}).execute()
+            logger.info(f"✅ Correo de tarea enviado exitosamente a {correo_destinatario} vía Gmail API.")
+            enviado = True
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo enviar notificación por Gmail API ({e}). Intentando SMTP...")
+
+    # 2. Si no se envió por Gmail API, intentar vía SMTP si está configurado en .env
+    if not enviado:
+        smtp_host = os.environ.get("SMTP_HOST")
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_pass = os.environ.get("SMTP_PASSWORD")
+        smtp_port = int(os.environ.get("SMTP_PORT", 587))
+        smtp_from = os.environ.get("SMTP_FROM", correo_asignador or smtp_user or "notificaciones@proelectrica.net")
+
+        if smtp_host and smtp_user and smtp_pass:
+            try:
+                msg = MIMEMultipart('alternative')
+                msg['To'] = correo_destinatario
+                msg['From'] = smtp_from
+                msg['Subject'] = asunto
+                msg.attach(MIMEText(cuerpo_texto, 'plain', 'utf-8'))
+                msg.attach(MIMEText(cuerpo_html, 'html', 'utf-8'))
+
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_from, [correo_destinatario], msg.as_string())
+                server.quit()
+                logger.info(f"✅ Correo de tarea enviado exitosamente a {correo_destinatario} vía SMTP.")
+                enviado = True
+            except Exception as e:
+                logger.error(f"❌ Error al enviar correo de tarea vía SMTP: {e}")
+
+    if not enviado:
+        logger.warning(
+            f"ℹ️ El correo a {correo_destinatario} no pudo enviarse automáticamente. "
+            "Para habilitar el envío automático vía Google Workspace, agrega el scope "
+            "'https://www.googleapis.com/auth/gmail.send' en admin.google.com -> Delegación de dominio, "
+            "o configura SMTP_HOST, SMTP_USER, SMTP_PASSWORD en las variables de entorno."
+        )
+
+    return enviado
 
 
 # =================================================================
@@ -566,8 +682,10 @@ def crear_tarea(
     nombre_asignador = nombre_de_usuario(current_user)
 
     titulo_ev = proyecto.titulo_proyecto if proyecto.titulo_proyecto else proyecto.empresa_solicitante
-    enlace_cal = crear_evento_calendario(
-        titulo_ev, payload.descripcion, payload.asignado_a, payload.fecha_limite, email_asignador
+
+    # Enviar correo al usuario asignado con el detalle de la tarea (sin agendar en Google Calendar)
+    enviar_correo_tarea(
+        titulo_ev, payload.descripcion, payload.asignado_a, payload.fecha_limite, nombre_asignador, email_asignador
     )
 
     nueva_tarea = TareaDB(
@@ -576,7 +694,7 @@ def crear_tarea(
         asignado_a=payload.asignado_a,
         asignado_por=nombre_asignador,
         fecha_limite=payload.fecha_limite,
-        enlace_calendario=enlace_cal
+        enlace_calendario=None
     )
     db.add(nueva_tarea)
     registrar_bitacora(
