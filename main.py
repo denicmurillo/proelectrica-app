@@ -721,6 +721,33 @@ def completar_tarea(
     return {"status": "success"}
 
 
+@app.patch("/v1/tareas/{id_tarea}/descompletar", status_code=200)
+def descompletar_tarea(
+    id_tarea: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    tarea = db.query(TareaDB).filter(TareaDB.id == id_tarea).first()
+    if not tarea:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+    tarea.estado = "Pendiente"
+    proyecto = db.query(ProyectoDB).filter(ProyectoDB.id == tarea.id_proyecto).with_for_update().first()
+    if proyecto:
+        registrar_bitacora(
+            proyecto, nombre_de_usuario(current_user),
+            f"Se reactivó la tarea: '{tarea.descripcion}'"
+        )
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "success"}
+
+
 # --- Webhooks (protegidos con Shared Secret, sin autenticación JWT de usuario) ---
 
 @app.post("/v1/proyectos/webhook-forms", status_code=201, dependencies=[Depends(verificar_webhook_secret)])

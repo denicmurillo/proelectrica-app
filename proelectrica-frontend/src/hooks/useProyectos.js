@@ -178,6 +178,22 @@ export function useCompletarTarea(idProyecto) {
 }
 
 /**
+ * Revierte / reactiva una tarea completada a pendiente (PATCH).
+ */
+export function useDescompletarTarea(idProyecto) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (idTarea) =>
+      apiClient.patch(`/v1/tareas/${idTarea}/descompletar`).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tareasActivas });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tareasProyecto(idProyecto) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.proyectos });
+    },
+  });
+}
+
+/**
  * Agrega una entrada a la bitácora (endpoint aislado, append-only).
  * El servidor pone el autor (desde el JWT) y la fecha; la entrada devuelta se agrega a la caché.
  */

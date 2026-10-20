@@ -424,11 +424,28 @@ export const DashboardTab = ({ proyectos = [], vistaDashboard, setVistaDashboard
                                         {tareasMostrar.map((tarea) => (
                                             <ListItem key={tarea.id} sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', mb: 2, backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' } }}>
                                                 <ListItemText
-                                                    primary={<Typography variant="subtitle1" fontWeight="bold" color="#0ea5e9" sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => abrirFicha((proyectos || []).find(x => x.id === tarea.id_proyecto))}>{tarea.proyecto}</Typography>}
+                                                    primary={
+                                                        <Typography variant="subtitle1" fontWeight="bold" color="#1e293b">
+                                                            {tarea.descripcion}
+                                                        </Typography>
+                                                    }
                                                     secondaryTypographyProps={{ component: 'div' }}
                                                     secondary={
-                                                        <Box sx={{ mt: 1 }}>
-                                                            <Typography variant="body2" color="#334155" fontWeight="500">{tarea.descripcion}</Typography>
+                                                        <Box sx={{ mt: 0.5 }}>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                                                                <Typography variant="body2" color="text.secondary" fontWeight="500">
+                                                                    Proyecto:
+                                                                </Typography>
+                                                                <Typography
+                                                                    variant="body2"
+                                                                    color="#0ea5e9"
+                                                                    fontWeight="600"
+                                                                    sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                                                                    onClick={() => abrirFicha((proyectos || []).find(x => x.id === tarea.id_proyecto))}
+                                                                >
+                                                                    {tarea.proyecto}
+                                                                </Typography>
+                                                            </Box>
                                                             <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
                                                                 <strong>Responsable:</strong> {tarea.asignado_a.split('@')[0]} | <strong>Asignado por:</strong> {tarea.asignado_por} | <strong>Límite:</strong> {tarea.fecha_limite}
                                                             </Typography>

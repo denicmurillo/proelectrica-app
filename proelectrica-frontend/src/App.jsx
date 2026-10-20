@@ -29,7 +29,7 @@ import { supabase } from './api/apiClient';
 import {
   useProyectos, useTareasActivas, useTareasProyecto,
   useActualizarProyecto, useCrearProyecto, useEliminarProyecto,
-  useCrearTarea, useEditarTarea, useCompletarTarea, useAgregarBitacora
+  useCrearTarea, useEditarTarea, useCompletarTarea, useDescompletarTarea, useAgregarBitacora
 } from './hooks/useProyectos';
 
 // --- GOOGLE ---
@@ -200,6 +200,7 @@ function AppContent() {
   const crearTareaMutation = useCrearTarea(proyectoSeleccionado?.id);
   const editarTareaMutation = useEditarTarea(proyectoSeleccionado?.id);
   const completarTareaMutation = useCompletarTarea(proyectoSeleccionado?.id);
+  const descompletarTareaMutation = useDescompletarTarea(proyectoSeleccionado?.id);
   const agregarBitacoraMutation = useAgregarBitacora();
 
   // La bitácora vive en el servidor (append-only) y se lee de la caché de React Query: así siempre incluye
@@ -357,6 +358,13 @@ function AppContent() {
       await completarTareaMutation.mutateAsync(id_tarea);
       mostrarMensaje("Tarea completada.");
     } catch (e) { mostrarMensaje("Error al completar.", "error"); }
+  };
+
+  const handleDescompletarTarea = async (id_tarea) => {
+    try {
+      await descompletarTareaMutation.mutateAsync(id_tarea);
+      mostrarMensaje("Tarea reactivada.");
+    } catch (e) { mostrarMensaje("Error al reactivar la tarea.", "error"); }
   };
 
   const handleGuardarEdicionTarea = async () => {
@@ -814,7 +822,7 @@ function AppContent() {
         tabDerecha={tabDerecha} setTabDerecha={setTabDerecha} setTareasExpandidas={setTareasExpandidas}
         setBitacoraExpandida={setBitacoraExpandida} datosNuevaTarea={datosNuevaTarea} setDatosNuevaTarea={setDatosNuevaTarea}
         handleCrearTarea={handleCrearTarea} creandoTarea={creandoTarea} tareasProyecto={tareasProyecto}
-        abrirEdicionTarea={abrirEdicionTarea} handleCompletarTarea={handleCompletarTarea} bitacora={bitacora}
+        abrirEdicionTarea={abrirEdicionTarea} handleCompletarTarea={handleCompletarTarea} handleDescompletarTarea={handleDescompletarTarea} bitacora={bitacora}
         nuevoComentario={nuevoComentario} setNuevoComentario={setNuevoComentario} agregarComentario={agregarComentario}
         inspectorOpciones={inspectorOpciones} colabOpciones={colabOpciones}
         handleNavegarExpediente={handleNavegarExpediente} hayAnterior={hayAnterior} haySiguiente={haySiguiente}
@@ -888,7 +896,11 @@ function AppContent() {
               </Box>
             ) : (
               <List disablePadding>
-                {tareasProyecto.map(t => (
+                {[...tareasProyecto].sort((a, b) => {
+                  if (a.estado === 'Completada' && b.estado !== 'Completada') return 1;
+                  if (a.estado !== 'Completada' && b.estado === 'Completada') return -1;
+                  return b.id - a.id;
+                }).map(t => (
                   <ListItem key={t.id} sx={{ px: 2, py: 1, mb: 1, backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', opacity: t.estado === 'Completada' ? 0.7 : 1 }}>
                     <ListItemText
                       primary={<Typography variant="subtitle1" fontWeight="bold" sx={{ color: t.estado === 'Completada' ? '#64748b' : '#1e293b', textDecoration: t.estado === 'Completada' ? 'line-through' : 'none' }}>{t.descripcion}</Typography>}
@@ -901,7 +913,7 @@ function AppContent() {
                         </Box>
                       }
                     />
-                    {t.estado === 'Pendiente' && (
+                    {t.estado === 'Pendiente' ? (
                       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 2 }}>
                         {t.enlace_calendario && <Button variant="outlined" size="small" color="info" onClick={() => window.open(t.enlace_calendario, '_blank')} sx={{ textTransform: 'none' }}>Calendario</Button>}
                         <Tooltip title="Editar Tarea">
@@ -909,6 +921,12 @@ function AppContent() {
                         </Tooltip>
                         <Tooltip title="Marcar como Completada">
                           <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ textTransform: 'none', fontWeight: 'bold', px: 2 }}>Completar</Button>
+                        </Tooltip>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 2 }}>
+                        <Tooltip title="Revertir (Habilitar tarea)">
+                          <Button variant="outlined" size="small" color="warning" onClick={() => handleDescompletarTarea(t.id)} sx={{ textTransform: 'none', fontWeight: 'bold', px: 2 }}>Revertir</Button>
                         </Tooltip>
                       </Box>
                     )}

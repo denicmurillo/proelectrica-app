@@ -39,7 +39,7 @@ export const ExpedienteModal = ({
     datosGC, handleTeclado, verificarYGuardarCampo, archivos, eliminarArchivo, abrirGoogleDrivePicker,
     tabDerecha, setTabDerecha, setTareasExpandidas, setBitacoraExpandida,
     datosNuevaTarea, setDatosNuevaTarea, handleCrearTarea, creandoTarea,
-    tareasProyecto, abrirEdicionTarea, handleCompletarTarea,
+    tareasProyecto, abrirEdicionTarea, handleCompletarTarea, handleDescompletarTarea,
     bitacora, nuevoComentario, setNuevoComentario, agregarComentario,
     inspectorOpciones, colabOpciones,
     handleNavegarExpediente, hayAnterior, haySiguiente // Nuevos controles
@@ -264,13 +264,19 @@ export const ExpedienteModal = ({
                                                     secondaryTypographyProps={{ component: 'div' }}
                                                     secondary={<Typography component="div" variant="caption" color="textSecondary">{t.asignado_a.split('@')[0]} | {t.fecha_limite}</Typography>}
                                                 />
-                                                {t.estado === 'Pendiente' && (
+                                                {t.estado === 'Pendiente' ? (
                                                     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                                                         <Tooltip title="Editar Tarea">
                                                             <Button variant="outlined" size="small" color="primary" onClick={() => abrirEdicionTarea(t)} sx={{ minWidth: 'auto', p: 0.5 }}><EditIcon fontSize="small" /></Button>
                                                         </Tooltip>
                                                         <Tooltip title="Marcar como Completada">
                                                             <Button variant="contained" size="small" color="success" onClick={() => handleCompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5, px: 1, textTransform: 'none', fontWeight: 'bold' }}>Completar</Button>
+                                                        </Tooltip>
+                                                    </Box>
+                                                ) : (
+                                                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                                                        <Tooltip title="Revertir (Habilitar tarea)">
+                                                            <Button variant="outlined" size="small" color="warning" onClick={() => handleDescompletarTarea(t.id)} sx={{ minWidth: 'auto', p: 0.5, px: 1, textTransform: 'none', fontWeight: 'bold' }}>Revertir</Button>
                                                         </Tooltip>
                                                     </Box>
                                                 )}
@@ -296,7 +302,7 @@ export const ExpedienteModal = ({
                             <Box ref={bitacoraContainerRef} sx={{ flexGrow: { xs: 0, md: 1 }, overflowY: { xs: 'visible', md: 'auto' }, p: 2, minHeight: { xs: 'auto', md: 0 } }}>
                                 <List disablePadding>
                                     {bitacora.map((comentario) => {
-                                        const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Editó la tarea)/) || comentario.autor === 'Sistema';
+                                        const esSistema = comentario.texto.match(/^(Cambió|Adjuntó|Eliminó|Registro migrado|Asignó una nueva|Se marcó como|Se reactivó|Editó la tarea)/) || comentario.autor === 'Sistema';
                                         return (
                                             <ListItem key={comentario.id} alignItems="flex-start" sx={{ px: 0, mb: 0.5, py: 0 }}>
                                                 <ListItemAvatar sx={{ minWidth: '36px' }}><Avatar sx={{ width: 28, height: 28, bgcolor: esSistema ? '#e2e8f0' : '#cbd5e1' }}><PersonIcon sx={{ fontSize: 18, color: esSistema ? '#94a3b8' : '#fff' }} /></Avatar></ListItemAvatar>
